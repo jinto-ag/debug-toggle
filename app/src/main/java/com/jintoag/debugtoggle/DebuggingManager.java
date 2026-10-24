@@ -26,6 +26,11 @@ public class DebuggingManager {
         this.resolver = this.context.getContentResolver();
     }
 
+    public boolean hasSecureSettingsPermission() {
+        return context.checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+
     public boolean isDeveloperOptionsEnabled() {
         return Settings.Global.getInt(resolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1;
     }

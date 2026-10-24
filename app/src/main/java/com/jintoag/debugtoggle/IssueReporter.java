@@ -39,7 +39,23 @@ public class IssueReporter {
         DebuggingManager manager = new DebuggingManager(context);
         StringBuilder sb = new StringBuilder();
         sb.append("### Diagnostic Information\n\n");
-        sb.append("- **App Version:** ").append("1.0.0 (Build 1)\n");
+
+        String versionName = "Unknown";
+        long versionCode = 0;
+        try {
+            android.content.pm.PackageInfo info;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                info = context.getPackageManager().getPackageInfo(context.getPackageName(), android.content.pm.PackageManager.PackageInfoFlags.of(0));
+            } else {
+                info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            }
+            if (info.versionName != null) {
+                versionName = info.versionName;
+            }
+            versionCode = androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(info);
+        } catch (Exception ignored) {
+        }
+        sb.append("- **App Version:** ").append(versionName).append(" (Build ").append(versionCode).append(")\n");
         sb.append("- **Device Model:** ").append(Build.MANUFACTURER).append(" ").append(Build.MODEL).append("\n");
         sb.append("- **Android Version:** Android ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")\n");
         sb.append("- **Security Patch:** ").append(Build.VERSION.SECURITY_PATCH).append("\n");
