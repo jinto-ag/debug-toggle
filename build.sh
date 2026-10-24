@@ -47,6 +47,8 @@ sed 's|<manifest |<manifest package="com.jintoag.debugtoggle" |' "$APP_DIR/Andro
     -I "$PLATFORM" \
     --min-sdk-version 26 \
     --target-sdk-version 35 \
+    --version-code 1 \
+    --version-name "1.0.0" \
     "$BUILD_DIR/compiled_res.zip" \
     -o "$BUILD_DIR/base.apk" \
     --java "$BUILD_DIR/gen"
