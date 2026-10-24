@@ -15,6 +15,7 @@
     { "type": "security", "section": "Security", "hidden": false }
   ],
   "scripts": {
-    "postbump": "bun run scripts/sync-version.js && bun run format && git add -A"
+    "postbump": "bun run scripts/sync-version.js",
+    "postchangelog": "bun run format && git add -A"
   }
 }
