@@ -1,0 +1,31 @@
+{
+  "name": "@jinto-ag/debug-toggle",
+  "$schema": "node_modules/nx/schemas/project-schema.json",
+  "targets": {
+    "build": {
+      "command": "./build.sh",
+      "outputs": ["{workspaceRoot}/DebugToggle-release.apk"]
+    },
+    "test": {
+      "command": "./gradlew test",
+      "outputs": ["{workspaceRoot}/app/build/reports/tests"]
+    },
+    "test:e2e": {
+      "command": "./scripts/test-e2e.sh",
+      "cache": false
+    },
+    "lint": {
+      "command": "./gradlew lint",
+      "outputs": ["{workspaceRoot}/app/build/reports/lint-results.html"]
+    },
+    "lint:secrets": {
+      "command": "secretlint '**/*'"
+    },
+    "format": {
+      "command": "biome format --write ."
+    },
+    "format:check": {
+      "command": "biome check ."
+    }
+  }
+}

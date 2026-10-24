@@ -1,0 +1,30 @@
+name: Security Report
+description: Report a security vulnerability privately
+title: "[Security]: "
+labels: ["security"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Important:** For sensitive security vulnerabilities, please use private reporting via [GitHub Security Advisories](https://github.com/jinto-ag/debug-toggle/security/advisories/new).
+  - type: textarea
+    id: summary
+    attributes:
+      label: Vulnerability Summary
+      description: Concise technical summary of the security issue.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Severity & Impact
+      description: Potential impact or affected components.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostic Context
+      description: In-app diagnostic output.
+    validations:
+      required: false

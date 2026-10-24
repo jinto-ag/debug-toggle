@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      - name: Setup Android SDK Licenses
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Node Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Secret Hygiene Check
+        run: bun run lint:secrets
+
+      - name: Code Style Check
+        run: bun run format:check
+
+      - name: Run Unit Tests
+        run: bun run test
+
+      - name: Build Release APK
+        run: bun run build
+
+      - name: Upload Release Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DebugToggle-release
+          path: DebugToggle-release.apk
+          retention-days: 7

@@ -1,0 +1,189 @@
+package com.jintoag.debugtoggle;
+
+import android.content.Context;
+import android.util.Log;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Deque;
+import java.util.List;
+import java.util.Locale;
+import java.util.regex.Pattern;
+
+public class AppLogger {
+
+    public static final int MAX_CAPACITY = 500;
+    public static final long MAX_BYTE_CAPACITY = 262144L; // 256 KB memory cap
+    private static final String TAG = "DebugToggle";
+
+    // Privacy & ZDR redaction patterns
+    private static final Pattern MAC_PATTERN = Pattern.compile("(?i)\\b(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}\\b");
+    private static final Pattern IPV4_PATTERN = Pattern.compile("\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b");
+    private static final Pattern IPV6_PATTERN = Pattern.compile("(?i)(?:\\b(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}\\b|\\b[0-9a-f]{1,4}::[0-9a-f:.]*\\b|\\bfe80::[0-9a-f:.]*\\b|\\b::[0-9a-f:.]+\\b)");
+    private static final Pattern SSID_PATTERN = Pattern.compile("(?i)\\b(?:ssid[:=\\s]+[\"']?)([^\"'\\r\\n,;]+)[\"']?");
+    private static final Pattern ADB_KEY_PATTERN = Pattern.compile("(?i)\\b[A-Za-z0-9+/]{40,}={0,2}\\b|(?i)ssh-rsa\\s+[A-Za-z0-9+/=]+");
+
+    public enum LogLevel {
+        ALL(0),
+        INFO(1),
+        WARN(2),
+        ERROR(3);
+
+        final int severity;
+        LogLevel(int severity) {
+            this.severity = severity;
+        }
+
+        public boolean satisfies(LogLevel minLevel) {
+            return this.severity >= minLevel.severity;
+        }
+    }
+
+    public static class LogEntry {
+        public final long timestamp;
+        public final LogLevel level;
+        public final String tag;
+        public final String message;
+
+        public LogEntry(long timestamp, LogLevel level, String tag, String message) {
+            this.timestamp = timestamp;
+            this.level = level;
+            this.tag = tag;
+            this.message = message;
+        }
+
+        public String getFormattedTimestamp() {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US);
+            return sdf.format(new Date(timestamp));
+        }
+
+        @Override
+        public String toString() {
+            return String.format(Locale.US, "[%s] [%s] [%s] %s",
+                    getFormattedTimestamp(), level.name(), tag, message);
+        }
+    }
+
+    private static final Deque<LogEntry> ringBuffer = new ArrayDeque<>(MAX_CAPACITY);
+    private static long totalBytes = 0L;
+
+    public static synchronized long getTotalBytes() {
+        return totalBytes;
+    }
+
+    public static synchronized void i(String tag, String message) {
+        logInternal(LogLevel.INFO, tag, message);
+        try {
+            Log.i(tag, message);
+        } catch (Throwable ignored) {
+            // Standalone JVM test runner fallback
+        }
+    }
+
+    public static synchronized void w(String tag, String message) {
+        logInternal(LogLevel.WARN, tag, message);
+        try {
+            Log.w(tag, message);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public static synchronized void e(String tag, String message) {
+        logInternal(LogLevel.ERROR, tag, message);
+        try {
+            Log.e(tag, message);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public static synchronized void e(String tag, String message, Throwable t) {
+        String fullMsg = message + (t != null ? " (" + t.getClass().getSimpleName() + ": " + t.getMessage() + ")" : "");
+        logInternal(LogLevel.ERROR, tag, fullMsg);
+        try {
+            Log.e(tag, fullMsg, t);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static synchronized void logInternal(LogLevel level, String tag, String rawMessage) {
+        String cleanMessage = sanitize(rawMessage);
+        int entryBytes = cleanMessage.length() + tag.length() + 32;
+
+        while (!ringBuffer.isEmpty() && (ringBuffer.size() >= MAX_CAPACITY || (totalBytes + entryBytes > MAX_BYTE_CAPACITY))) {
+            LogEntry evicted = ringBuffer.pollFirst();
+            if (evicted != null) {
+                totalBytes = Math.max(0L, totalBytes - (evicted.message.length() + evicted.tag.length() + 32));
+            }
+        }
+        ringBuffer.addLast(new LogEntry(System.currentTimeMillis(), level, tag, cleanMessage));
+        totalBytes += entryBytes;
+    }
+
+    public static String sanitize(String input) {
+        if (input == null) return "";
+        String sanitized = MAC_PATTERN.matcher(input).replaceAll("[REDACTED_MAC]");
+        sanitized = IPV4_PATTERN.matcher(sanitized).replaceAll("[REDACTED_IP]");
+        sanitized = IPV6_PATTERN.matcher(sanitized).replaceAll("[REDACTED_IPV6]");
+        sanitized = SSID_PATTERN.matcher(sanitized).replaceAll("SSID: \"[REDACTED_SSID]\"");
+        sanitized = ADB_KEY_PATTERN.matcher(sanitized).replaceAll("[REDACTED_ADB_KEY]");
+        return sanitized;
+    }
+
+    public static synchronized List<LogEntry> getEntries(LogLevel minLevel, String searchQuery) {
+        List<LogEntry> results = new ArrayList<>();
+        String queryLower = (searchQuery != null) ? searchQuery.toLowerCase(Locale.US).trim() : "";
+
+        for (LogEntry entry : ringBuffer) {
+            if (entry.level.satisfies(minLevel)) {
+                if (queryLower.isEmpty() ||
+                        entry.message.toLowerCase(Locale.US).contains(queryLower) ||
+                        entry.tag.toLowerCase(Locale.US).contains(queryLower)) {
+                    results.add(entry);
+                }
+            }
+        }
+        return results;
+    }
+
+    public static synchronized void clear() {
+        clear(null);
+    }
+
+    public static synchronized void clear(Context context) {
+        ringBuffer.clear();
+        totalBytes = 0L;
+        if (context != null) {
+            try {
+                File logFile = new File(context.getCacheDir(), "debugtoggle_audit_log.txt");
+                if (logFile.exists()) {
+                    logFile.delete();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    public static synchronized File exportSanitizedLogs(Context context) throws IOException {
+        File cacheDir = (context != null) ? context.getCacheDir() : new File("/tmp");
+        File logFile = new File(cacheDir, "debugtoggle_audit_log.txt");
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("=== DEBUG TOGGLE SANITIZED AUDIT LOGS ===\n");
+        sb.append("Export Time: ").append(new Date().toString()).append("\n");
+        sb.append("Total Entries: ").append(ringBuffer.size()).append("\n\n");
+
+        for (LogEntry entry : ringBuffer) {
+            sb.append(entry.toString()).append("\n");
+        }
+
+        try (FileOutputStream fos = new FileOutputStream(logFile)) {
+            fos.write(sb.toString().getBytes(StandardCharsets.UTF_8));
+        }
+        return logFile;
+    }
+}
