@@ -1,0 +1,19 @@
+{
+  "header": "# Changelog\n\nAll notable changes to DebugToggle are documented in this file.\n",
+  "types": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "perf", "section": "Performance Improvements" },
+    { "type": "revert", "section": "Reverts" },
+    { "type": "docs", "section": "Documentation", "hidden": false },
+    { "type": "style", "section": "Styles", "hidden": true },
+    { "type": "refactor", "section": "Refactoring", "hidden": false },
+    { "type": "test", "section": "Tests", "hidden": false },
+    { "type": "build", "section": "Build System", "hidden": false },
+    { "type": "ci", "section": "Continuous Integration", "hidden": false },
+    { "type": "security", "section": "Security", "hidden": false }
+  ],
+  "scripts": {
+    "postbump": "bun run scripts/sync-version.js && git add app/build.gradle.kts build.sh"
+  }
+}

@@ -12,12 +12,21 @@
     "lint:secrets": "nx run @jinto-ag/debug-toggle:lint:secrets",
     "format": "nx run @jinto-ag/debug-toggle:format",
     "format:check": "nx run @jinto-ag/debug-toggle:format:check",
+    "commitlint": "commitlint",
+    "release": "commit-and-tag-version",
+    "release:dry-run": "commit-and-tag-version --dry-run",
+    "release:patch": "commit-and-tag-version --release-as patch",
+    "release:minor": "commit-and-tag-version --release-as minor",
+    "release:major": "commit-and-tag-version --release-as major",
     "prepare": "husky"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.2",
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
     "@nx/devkit": "^23.3.1",
     "@secretlint/secretlint-rule-preset-recommend": "^13.0.7",
+    "commit-and-tag-version": "^13.3.0",
     "husky": "^9.1.7",
     "nx": "^23.3.1",
     "secretlint": "^13.0.7"
