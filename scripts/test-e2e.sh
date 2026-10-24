@@ -3,7 +3,7 @@ set -eo pipefail
 
 AVD_NAME="${AVD_NAME:-test}"
 EMU_STARTED=0
-TARGET_DEVICE=""
+TARGET_DEVICE="${TARGET_DEVICE:-}"
 
 cleanup() {
     if [ "$EMU_STARTED" -eq 1 ] && [ -n "$TARGET_DEVICE" ]; then
@@ -35,7 +35,9 @@ if [ "$1" == "--emulator" ] || [ -n "$USE_EMULATOR" ]; then
         echo "Emulator booted ($TARGET_DEVICE)."
     fi
 else
-    TARGET_DEVICE=$(adb devices | grep -E "device$" | head -n 1 | awk '{print $1}')
+    if [ -z "$TARGET_DEVICE" ]; then
+        TARGET_DEVICE=$(adb devices | grep -E "[[:space:]]device$" | head -n 1 | awk '{print $1}')
+    fi
     if [ -z "$TARGET_DEVICE" ]; then
         if [ "$1" == "--ci" ] || [ "$CI" == "true" ]; then
             echo "CI environment without connected device: skipping device E2E pass."

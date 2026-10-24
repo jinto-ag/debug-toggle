@@ -2,9 +2,17 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      force_release:
+        description: "Force release build even if tag already exists"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -15,42 +23,88 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v6
         with:
-          java-version: "21"
-          distribution: "temurin"
-
-      - name: Setup Android SDK Licenses
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
+      - name: Determine Version and Tag
+        id: version_check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          FORCE_RELEASE: ${{ github.event.inputs.force_release }}
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_NAME="v${PKG_VERSION}"
+          echo "Package version: $PKG_VERSION"
+          echo "Target tag: $TAG_NAME"
+
+          if [ "$EVENT_NAME" = "push" ] && [[ "$REF" == refs/tags/* ]]; then
+            echo "Triggered by tag push: $REF_NAME"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "release_tag=$REF_NAME" >> "$GITHUB_OUTPUT"
+          elif git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Tag $TAG_NAME already exists."
+            if [ "$FORCE_RELEASE" = "true" ]; then
+              echo "Force release requested."
+              echo "should_release=true" >> "$GITHUB_OUTPUT"
+              echo "release_tag=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+            else
+              echo "No new version to release. Skipping release job."
+              echo "should_release=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "New version detected: $PKG_VERSION (Tag $TAG_NAME does not exist)"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
+            git push origin "$TAG_NAME"
+            echo "Created and pushed tag $TAG_NAME"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "release_tag=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK 21
+        if: steps.version_check.outputs.should_release == 'true'
+        uses: actions/setup-java@v6
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      - name: Setup Android SDK Licenses
+        if: steps.version_check.outputs.should_release == 'true'
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+
       - name: Install Node Dependencies
+        if: steps.version_check.outputs.should_release == 'true'
         run: bun install --frozen-lockfile
 
       - name: Build Release APK
+        if: steps.version_check.outputs.should_release == 'true'
         run: |
           chmod +x gradlew build.sh
           bun run build
 
       - name: Generate Checksums
+        if: steps.version_check.outputs.should_release == 'true'
         run: |
           sha256sum DebugToggle-release.apk > DebugToggle-release.apk.sha256
 
       - name: Create GitHub Release
+        if: steps.version_check.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
         with:
+          tag_name: ${{ steps.version_check.outputs.release_tag }}
+          name: DebugToggle ${{ steps.version_check.outputs.release_tag }}
           files: |
             DebugToggle-release.apk
             DebugToggle-release.apk.sha256
-          name: DebugToggle ${{ github.ref_name }}
           draft: false
           prerelease: false
           generate_release_notes: true

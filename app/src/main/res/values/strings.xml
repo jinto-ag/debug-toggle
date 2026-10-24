@@ -36,6 +36,15 @@
     <string name="action_enable_all_toast">Developer Mode, USB, Wi-Fi &amp; Auth Timeout Enabled</string>
     <string name="action_revoke_auth_toast">Tap \'Revoke USB debugging authorisations\' in Settings</string>
     <string name="perm_error_msg">Permission required: adb shell pm grant com.jintoag.debugtoggle android.permission.WRITE_SECURE_SETTINGS</string>
+    <string name="perm_card_title">Setup Permission Required</string>
+    <string name="perm_card_desc">Android requires WRITE_SECURE_SETTINGS to toggle USB and Wireless debugging. You can grant it interactively via Shizuku, or copy the ADB command.</string>
+    <string name="btn_grant_shizuku">Grant via Shizuku</string>
+    <string name="btn_copy_adb">Copy ADB Command</string>
+    <string name="adb_copied_toast">ADB command copied to clipboard</string>
+    <string name="shizuku_not_installed">Shizuku is not installed. Please install Shizuku or use ADB command.</string>
+    <string name="shizuku_not_running">Shizuku service is not running. Please launch Shizuku first.</string>
+    <string name="shizuku_grant_success">WRITE_SECURE_SETTINGS granted successfully via Shizuku!</string>
+    <string name="shizuku_grant_failed">Failed to grant permission via Shizuku: %1$s</string>
 
     <string name="section_about_share">ABOUT &amp; SHARE</string>
     <string name="btn_share_app">Share App (APK)</string>

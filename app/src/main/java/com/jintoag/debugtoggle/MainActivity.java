@@ -2,7 +2,10 @@ package com.jintoag.debugtoggle;
 
 import android.app.Activity;
 import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.database.ContentObserver;
 import android.graphics.Color;
@@ -32,6 +35,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import rikka.shizuku.Shizuku;
 
 public class MainActivity extends Activity {
 
@@ -43,9 +47,34 @@ public class MainActivity extends Activity {
     private TextView tvStatusHeader;
     private TextView tvStatusNetwork;
     private View statusIndicatorDot;
+    private LinearLayout permissionCard;
 
     private boolean isUpdatingFromObserver = false;
     private ContentObserver settingsObserver;
+
+    private final Shizuku.OnRequestPermissionResultListener shizukuPermissionListener = (requestCode, grantResult) -> {
+        if (requestCode == ShizukuManager.REQUEST_CODE_SHIZUKU_PERMISSION) {
+            runOnUiThread(() -> {
+                if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                    performShizukuGrant();
+                } else {
+                    Toast.makeText(this, "Shizuku permission denied by user", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+    };
+
+    private void performShizukuGrant() {
+        Toast.makeText(this, "Granting WRITE_SECURE_SETTINGS via Shizuku...", Toast.LENGTH_SHORT).show();
+        ShizukuManager.grantSecureSettingsViaShizuku(this, (success, message) -> runOnUiThread(() -> {
+            if (success) {
+                Toast.makeText(this, R.string.shizuku_grant_success, Toast.LENGTH_SHORT).show();
+                refreshUiState();
+            } else {
+                Toast.makeText(this, getString(R.string.shizuku_grant_failed, message), Toast.LENGTH_LONG).show();
+            }
+        }));
+    }
 
     private int colorSurface;
     private int colorSurfaceContainer;
@@ -55,6 +84,34 @@ public class MainActivity extends Activity {
     private int colorTextPrimary;
     private int colorTextSecondary;
     private int colorOutline;
+
+    private String getAppVersionName() {
+        try {
+            android.content.pm.PackageInfo info;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                info = getPackageManager().getPackageInfo(getPackageName(), PackageManager.PackageInfoFlags.of(0));
+            } else {
+                info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            }
+            return info.versionName != null ? info.versionName : "1.0.0";
+        } catch (Exception ignored) {
+            return "1.0.0";
+        }
+    }
+
+    private long getAppVersionCode() {
+        try {
+            android.content.pm.PackageInfo info;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                info = getPackageManager().getPackageInfo(getPackageName(), PackageManager.PackageInfoFlags.of(0));
+            } else {
+                info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            }
+            return androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(info);
+        } catch (Exception ignored) {
+            return 1;
+        }
+    }
 
     private int dp(float dp) {
         return Math.round(dp * getResources().getDisplayMetrics().density);
@@ -69,8 +126,9 @@ public class MainActivity extends Activity {
         initThemeColors();
         buildMaterialUi();
         registerSettingsObserver();
+        Shizuku.addRequestPermissionResultListener(shizukuPermissionListener);
 
-        AppLogger.i("MainActivity", "DebugToggle v1.0.0 initialized");
+        AppLogger.i("MainActivity", "DebugToggle v" + getAppVersionName() + " (" + getAppVersionCode() + ") initialized");
         logSystemStates();
     }
 
@@ -165,6 +223,96 @@ public class MainActivity extends Activity {
         scrollContent.setOrientation(LinearLayout.VERTICAL);
         scrollView.addView(scrollContent);
         root.addView(scrollView);
+
+        // Permission Required Card (Interactive Shizuku & ADB)
+        permissionCard = new LinearLayout(this);
+        permissionCard.setOrientation(LinearLayout.VERTICAL);
+        permissionCard.setPadding(dp(16), dp(14), dp(16), dp(14));
+        GradientDrawable permBg = new GradientDrawable();
+        permBg.setColor(colorSurfaceContainer);
+        permBg.setCornerRadius(dp(16));
+        permBg.setStroke(dp(1), Color.parseColor("#FFA000"));
+        permissionCard.setBackground(permBg);
+
+        LinearLayout permHeaderRow = new LinearLayout(this);
+        permHeaderRow.setOrientation(LinearLayout.HORIZONTAL);
+        permHeaderRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        ImageView permWarnIcon = new ImageView(this);
+        permWarnIcon.setImageResource(R.drawable.ic_shield_clock);
+        permWarnIcon.setColorFilter(Color.parseColor("#FFA000"));
+        LinearLayout.LayoutParams warnParams = new LinearLayout.LayoutParams(dp(20), dp(20));
+        warnParams.setMarginEnd(dp(8));
+        permWarnIcon.setLayoutParams(warnParams);
+        permHeaderRow.addView(permWarnIcon);
+
+        TextView tvPermTitle = new TextView(this);
+        tvPermTitle.setText(R.string.perm_card_title);
+        tvPermTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        tvPermTitle.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        tvPermTitle.setTextColor(colorTextPrimary);
+        permHeaderRow.addView(tvPermTitle);
+        permissionCard.addView(permHeaderRow);
+
+        TextView tvPermDesc = new TextView(this);
+        tvPermDesc.setText(R.string.perm_card_desc);
+        tvPermDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        tvPermDesc.setTextColor(colorTextSecondary);
+        tvPermDesc.setPadding(0, dp(6), 0, dp(12));
+        permissionCard.addView(tvPermDesc);
+
+        Button btnGrantShizuku = new Button(this);
+        btnGrantShizuku.setText(R.string.btn_grant_shizuku);
+        btnGrantShizuku.setTextColor(colorOnPrimary);
+        btnGrantShizuku.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        btnGrantShizuku.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        btnGrantShizuku.setGravity(Gravity.CENTER);
+        btnGrantShizuku.setMinHeight(dp(44));
+        btnGrantShizuku.setAllCaps(false);
+        GradientDrawable shizukuBtnBg = new GradientDrawable();
+        shizukuBtnBg.setColor(colorPrimary);
+        shizukuBtnBg.setCornerRadius(dp(22));
+        btnGrantShizuku.setBackground(shizukuBtnBg);
+        btnGrantShizuku.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+            if (!ShizukuManager.isShizukuInstalled(this)) {
+                Toast.makeText(this, R.string.shizuku_not_installed, Toast.LENGTH_LONG).show();
+            } else if (!ShizukuManager.isShizukuRunning()) {
+                Toast.makeText(this, R.string.shizuku_not_running, Toast.LENGTH_LONG).show();
+            } else if (!ShizukuManager.hasShizukuPermission()) {
+                ShizukuManager.requestShizukuPermission();
+            } else {
+                performShizukuGrant();
+            }
+        });
+        permissionCard.addView(btnGrantShizuku);
+
+        Button btnCopyAdb = createTonalButton(
+                R.string.btn_copy_adb,
+                0,
+                v -> {
+                    v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                    ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    ClipData clip = ClipData.newPlainText("ADB Command", "adb shell pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS");
+                    if (clipboard != null) {
+                        clipboard.setPrimaryClip(clip);
+                        Toast.makeText(this, R.string.adb_copied_toast, Toast.LENGTH_SHORT).show();
+                    }
+                }
+        );
+        LinearLayout.LayoutParams copyParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        copyParams.setMargins(0, dp(8), 0, 0);
+        btnCopyAdb.setLayoutParams(copyParams);
+        permissionCard.addView(btnCopyAdb);
+
+        LinearLayout.LayoutParams permCardParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        permCardParams.setMargins(0, 0, 0, dp(14));
+        permissionCard.setLayoutParams(permCardParams);
+        scrollContent.addView(permissionCard);
 
         // Status Card (Hero banner)
         LinearLayout statusCard = new LinearLayout(this);
@@ -479,7 +627,7 @@ public class MainActivity extends Activity {
 
         // Footer: Version & Author
         TextView tvVersion = new TextView(this);
-        tvVersion.setText(getString(R.string.app_version_fmt, "1.0.0", 1));
+        tvVersion.setText(getString(R.string.app_version_fmt, getAppVersionName(), getAppVersionCode()));
         tvVersion.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         tvVersion.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
         tvVersion.setTextColor(colorTextSecondary);
@@ -676,6 +824,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener);
         if (settingsObserver != null) {
             getContentResolver().unregisterContentObserver(settingsObserver);
         }
@@ -686,6 +835,11 @@ public class MainActivity extends Activity {
         isUpdatingFromObserver = true;
 
         try {
+            if (permissionCard != null) {
+                boolean hasSecureSettings = manager.hasSecureSettingsPermission();
+                permissionCard.setVisibility(hasSecureSettings ? View.GONE : View.VISIBLE);
+            }
+
             boolean dev = manager.isDeveloperOptionsEnabled();
             boolean usb = manager.isUsbDebuggingEnabled();
             boolean wifi = manager.isWirelessDebuggingEnabled();
