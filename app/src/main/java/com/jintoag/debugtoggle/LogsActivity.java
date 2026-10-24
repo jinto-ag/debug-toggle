@@ -49,6 +49,34 @@ public class LogsActivity extends Activity {
     private TextView btnFilterWarn;
     private TextView btnFilterError;
 
+    private String getAppVersionName() {
+        try {
+            android.content.pm.PackageInfo info;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                info = getPackageManager().getPackageInfo(getPackageName(), android.content.pm.PackageManager.PackageInfoFlags.of(0));
+            } else {
+                info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            }
+            return info.versionName != null ? info.versionName : "1.1.0";
+        } catch (Exception ignored) {
+            return "1.1.0";
+        }
+    }
+
+    private long getAppVersionCode() {
+        try {
+            android.content.pm.PackageInfo info;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                info = getPackageManager().getPackageInfo(getPackageName(), android.content.pm.PackageManager.PackageInfoFlags.of(0));
+            } else {
+                info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            }
+            return androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(info);
+        } catch (Exception ignored) {
+            return 10100;
+        }
+    }
+
     private int dp(float dp) {
         return Math.round(dp * getResources().getDisplayMetrics().density);
     }
@@ -113,15 +141,26 @@ public class LogsActivity extends Activity {
         );
         headerRow.addView(btnBack);
 
+        LinearLayout titleCol = new LinearLayout(this);
+        titleCol.setOrientation(LinearLayout.VERTICAL);
+        titleCol.setPadding(dp(12), 0, dp(8), 0);
+        LinearLayout.LayoutParams titleColParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
+        titleCol.setLayoutParams(titleColParams);
+
         TextView tvTitle = new TextView(this);
         tvTitle.setText(R.string.logs_title);
-        tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         tvTitle.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         tvTitle.setTextColor(colorTextPrimary);
-        tvTitle.setPadding(dp(12), 0, dp(8), 0);
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
-        tvTitle.setLayoutParams(titleParams);
-        headerRow.addView(tvTitle);
+        titleCol.addView(tvTitle);
+
+        TextView tvVersionSubtitle = new TextView(this);
+        tvVersionSubtitle.setText(getString(R.string.app_version_fmt, getAppVersionName(), getAppVersionCode()));
+        tvVersionSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        tvVersionSubtitle.setTextColor(colorTextSecondary);
+        titleCol.addView(tvVersionSubtitle);
+
+        headerRow.addView(titleCol);
 
         ImageView btnExport = createHeaderIconButton(
                 R.drawable.ic_share,

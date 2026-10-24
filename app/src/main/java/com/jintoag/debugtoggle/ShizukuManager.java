@@ -16,6 +16,7 @@ public class ShizukuManager {
     }
 
     public static boolean isShizukuInstalled(Context context) {
+        if (context == null) return false;
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 context.getPackageManager().getPackageInfo("moe.shizuku.privileged.api", PackageManager.PackageInfoFlags.of(0));
@@ -25,7 +26,13 @@ public class ShizukuManager {
             return true;
         } catch (PackageManager.NameNotFoundException e) {
             return false;
+        } catch (Throwable t) {
+            return false;
         }
+    }
+
+    public static boolean isServiceAvailable(Context context) {
+        return isShizukuInstalled(context) && isShizukuRunning();
     }
 
     public static boolean isShizukuAvailable() {
@@ -51,6 +58,10 @@ public class ShizukuManager {
         }
     }
 
+    public static boolean hasPermission() {
+        return hasShizukuPermission();
+    }
+
     public static void requestShizukuPermission() {
         if (!isShizukuAvailable()) {
             return;
@@ -58,26 +69,40 @@ public class ShizukuManager {
         try {
             Shizuku.requestPermission(REQUEST_CODE_SHIZUKU_PERMISSION);
         } catch (Throwable t) {
-            AppLogger.e("Shizuku", "Failed to request Shizuku permission: " + t.getMessage());
+            AppLogger.e("PermissionManager", "Failed to request permission: " + t.getMessage());
         }
     }
 
+    public static void requestPermission() {
+        requestShizukuPermission();
+    }
+
+    static java.util.concurrent.Executor backgroundExecutor = null;
+
+    static void setExecutorForTest(java.util.concurrent.Executor executor) {
+        backgroundExecutor = executor;
+    }
+
+    public static void grantPermission(Context context, GrantCallback callback) {
+        grantSecureSettingsViaShizuku(context, callback);
+    }
+
     public static void grantSecureSettingsViaShizuku(Context context, GrantCallback callback) {
-        new Thread(() -> {
+        Runnable task = () -> {
             try {
                 if (!isShizukuAvailable()) {
-                    callback.onResult(false, "Shizuku service is not running");
+                    callback.onResult(false, "Automated service is not running");
                     return;
                 }
                 if (!hasShizukuPermission()) {
-                    callback.onResult(false, "Shizuku permission not granted");
+                    callback.onResult(false, "Permission not granted");
                     return;
                 }
 
-                String pkg = context.getPackageName();
+                String pkg = context != null ? context.getPackageName() : "com.jintoag.debugtoggle";
                 IShizukuService service = IShizukuService.Stub.asInterface(Shizuku.getBinder());
                 if (service == null) {
-                    callback.onResult(false, "IShizukuService is unavailable");
+                    callback.onResult(false, "System service is unavailable");
                     return;
                 }
 
@@ -85,16 +110,22 @@ public class ShizukuManager {
                 IRemoteProcess remoteProcess = service.newProcess(cmd, null, null);
                 int exitCode = remoteProcess.waitFor();
                 if (exitCode == 0) {
-                    AppLogger.i("Shizuku", "WRITE_SECURE_SETTINGS granted via Shizuku successfully");
-                    callback.onResult(true, "Permission granted successfully via Shizuku");
+                    AppLogger.i("PermissionManager", "WRITE_SECURE_SETTINGS granted successfully");
+                    callback.onResult(true, "Permission granted successfully");
                 } else {
-                    AppLogger.w("Shizuku", "pm grant returned exit code: " + exitCode);
-                    callback.onResult(false, "pm grant failed with exit code: " + exitCode);
+                    AppLogger.w("PermissionManager", "pm grant returned exit code: " + exitCode);
+                    callback.onResult(false, "Command failed with exit code: " + exitCode);
                 }
             } catch (Throwable t) {
-                AppLogger.e("Shizuku", "Error granting permission via Shizuku: " + t.getMessage());
-                callback.onResult(false, "Shizuku execution failed: " + t.getMessage());
+                AppLogger.e("PermissionManager", "Error granting permission: " + t.getMessage());
+                callback.onResult(false, "Execution failed: " + t.getMessage());
             }
-        }).start();
+        };
+
+        if (backgroundExecutor != null) {
+            backgroundExecutor.execute(task);
+        } else {
+            new Thread(task).start();
+        }
     }
 }

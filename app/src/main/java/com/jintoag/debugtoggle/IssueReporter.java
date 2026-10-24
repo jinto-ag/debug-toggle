@@ -129,6 +129,9 @@ public class IssueReporter {
         if (cm != null) {
             cm.setPrimaryClip(ClipData.newPlainText("DebugToggle Diagnostics", body));
         }
-        Toast.makeText(context, "Offline: Diagnostics copied to clipboard. Submit on GitHub when connected.", Toast.LENGTH_LONG).show();
+        Toast toast = Toast.makeText(context, "Offline: Diagnostics copied to clipboard. Submit on GitHub when connected.", Toast.LENGTH_LONG);
+        if (toast != null) {
+            toast.show();
+        }
     }
 }

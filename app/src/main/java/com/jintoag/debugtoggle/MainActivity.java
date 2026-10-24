@@ -56,22 +56,22 @@ public class MainActivity extends Activity {
         if (requestCode == ShizukuManager.REQUEST_CODE_SHIZUKU_PERMISSION) {
             runOnUiThread(() -> {
                 if (grantResult == PackageManager.PERMISSION_GRANTED) {
-                    performShizukuGrant();
+                    performGrant();
                 } else {
-                    Toast.makeText(this, "Shizuku permission denied by user", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, R.string.perm_grant_denied, Toast.LENGTH_SHORT).show();
                 }
             });
         }
     };
 
-    private void performShizukuGrant() {
-        Toast.makeText(this, "Granting WRITE_SECURE_SETTINGS via Shizuku...", Toast.LENGTH_SHORT).show();
-        ShizukuManager.grantSecureSettingsViaShizuku(this, (success, message) -> runOnUiThread(() -> {
+    private void performGrant() {
+        Toast.makeText(this, R.string.perm_granting_toast, Toast.LENGTH_SHORT).show();
+        ShizukuManager.grantPermission(this, (success, message) -> runOnUiThread(() -> {
             if (success) {
-                Toast.makeText(this, R.string.shizuku_grant_success, Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, R.string.perm_grant_success, Toast.LENGTH_SHORT).show();
                 refreshUiState();
             } else {
-                Toast.makeText(this, getString(R.string.shizuku_grant_failed, message), Toast.LENGTH_LONG).show();
+                Toast.makeText(this, getString(R.string.perm_grant_failed, message), Toast.LENGTH_LONG).show();
             }
         }));
     }
@@ -224,7 +224,7 @@ public class MainActivity extends Activity {
         scrollView.addView(scrollContent);
         root.addView(scrollView);
 
-        // Permission Required Card (Interactive Shizuku & ADB)
+        // Permission Required Card (Automated & Command)
         permissionCard = new LinearLayout(this);
         permissionCard.setOrientation(LinearLayout.VERTICAL);
         permissionCard.setPadding(dp(16), dp(14), dp(16), dp(14));
@@ -261,42 +261,40 @@ public class MainActivity extends Activity {
         tvPermDesc.setPadding(0, dp(6), 0, dp(12));
         permissionCard.addView(tvPermDesc);
 
-        Button btnGrantShizuku = new Button(this);
-        btnGrantShizuku.setText(R.string.btn_grant_shizuku);
-        btnGrantShizuku.setTextColor(colorOnPrimary);
-        btnGrantShizuku.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        btnGrantShizuku.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        btnGrantShizuku.setGravity(Gravity.CENTER);
-        btnGrantShizuku.setMinHeight(dp(44));
-        btnGrantShizuku.setAllCaps(false);
-        GradientDrawable shizukuBtnBg = new GradientDrawable();
-        shizukuBtnBg.setColor(colorPrimary);
-        shizukuBtnBg.setCornerRadius(dp(22));
-        btnGrantShizuku.setBackground(shizukuBtnBg);
-        btnGrantShizuku.setOnClickListener(v -> {
+        Button btnGrantPerm = new Button(this);
+        btnGrantPerm.setText(R.string.btn_grant_permission);
+        btnGrantPerm.setTextColor(colorOnPrimary);
+        btnGrantPerm.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        btnGrantPerm.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        btnGrantPerm.setGravity(Gravity.CENTER);
+        btnGrantPerm.setMinHeight(dp(44));
+        btnGrantPerm.setAllCaps(false);
+        GradientDrawable grantBtnBg = new GradientDrawable();
+        grantBtnBg.setColor(colorPrimary);
+        grantBtnBg.setCornerRadius(dp(22));
+        btnGrantPerm.setBackground(grantBtnBg);
+        btnGrantPerm.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-            if (!ShizukuManager.isShizukuInstalled(this)) {
-                Toast.makeText(this, R.string.shizuku_not_installed, Toast.LENGTH_LONG).show();
-            } else if (!ShizukuManager.isShizukuRunning()) {
-                Toast.makeText(this, R.string.shizuku_not_running, Toast.LENGTH_LONG).show();
-            } else if (!ShizukuManager.hasShizukuPermission()) {
-                ShizukuManager.requestShizukuPermission();
+            if (!ShizukuManager.isServiceAvailable(this)) {
+                Toast.makeText(this, R.string.perm_service_unavailable, Toast.LENGTH_LONG).show();
+            } else if (!ShizukuManager.hasPermission()) {
+                ShizukuManager.requestPermission();
             } else {
-                performShizukuGrant();
+                performGrant();
             }
         });
-        permissionCard.addView(btnGrantShizuku);
+        permissionCard.addView(btnGrantPerm);
 
-        Button btnCopyAdb = createTonalButton(
-                R.string.btn_copy_adb,
+        Button btnCopyCommand = createTonalButton(
+                R.string.btn_copy_command,
                 0,
                 v -> {
                     v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
                     ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                    ClipData clip = ClipData.newPlainText("ADB Command", "adb shell pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS");
+                    ClipData clip = ClipData.newPlainText("Setup Command", "adb shell pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS");
                     if (clipboard != null) {
                         clipboard.setPrimaryClip(clip);
-                        Toast.makeText(this, R.string.adb_copied_toast, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, R.string.command_copied_toast, Toast.LENGTH_SHORT).show();
                     }
                 }
         );
@@ -304,8 +302,8 @@ public class MainActivity extends Activity {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         );
         copyParams.setMargins(0, dp(8), 0, 0);
-        btnCopyAdb.setLayoutParams(copyParams);
-        permissionCard.addView(btnCopyAdb);
+        btnCopyCommand.setLayoutParams(copyParams);
+        permissionCard.addView(btnCopyCommand);
 
         LinearLayout.LayoutParams permCardParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
@@ -501,11 +499,15 @@ public class MainActivity extends Activity {
                 R.drawable.ic_key_off,
                 v -> {
                     v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                    if (manager.hasSecureSettingsPermission()) {
+                        try {
+                            manager.ensureDeveloperOptionsActive();
+                        } catch (Exception ignored) {
+                        }
+                    }
                     try {
-                        manager.ensureDeveloperOptionsActive();
                         AppLogger.i("MainActivity", "Opened Revoke Authorizations in Settings");
-                        Intent intent = manager.getDeveloperOptionsIntent();
-                        startActivity(intent);
+                        startActivity(manager.getDeveloperOptionsIntent());
                         Toast.makeText(this, R.string.action_revoke_auth_toast, Toast.LENGTH_LONG).show();
                     } catch (Exception e) {
                         showError(e);
@@ -525,8 +527,13 @@ public class MainActivity extends Activity {
                 R.drawable.ic_settings,
                 v -> {
                     v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                    if (manager.hasSecureSettingsPermission()) {
+                        try {
+                            manager.ensureDeveloperOptionsActive();
+                        } catch (Exception ignored) {
+                        }
+                    }
                     try {
-                        manager.ensureDeveloperOptionsActive();
                         AppLogger.i("MainActivity", "Opened Developer Options Settings");
                         startActivity(manager.getDeveloperOptionsIntent());
                     } catch (Exception e) {
