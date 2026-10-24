@@ -6,7 +6,7 @@ All notable changes to DebugToggle are documented in this file.
 
 ### Bug Fixes
 
-* **app:** sanitize user-facing copy, fix settings launch, and enforce 95% test coverage ([#12](https://github.com/jinto-ag/debug-toggle/issues/12)) ([a921a0b](https://github.com/jinto-ag/debug-toggle/commit/a921a0b1fa96c70d6df839356401d9f26d1110ac))
+- **app:** sanitize user-facing copy, fix settings launch, and enforce 95% test coverage ([#12](https://github.com/jinto-ag/debug-toggle/issues/12)) ([a921a0b](https://github.com/jinto-ag/debug-toggle/commit/a921a0b1fa96c70d6df839356401d9f26d1110ac))
 
 ## [1.1.0](https://github.com/jinto-ag/debug-toggle/compare/v1.0.0...v1.1.0) (2026-10-24)
 
