@@ -3,19 +3,20 @@ package com.jintoag.debugtoggle;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.Button;
+import android.view.WindowInsets;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -43,16 +44,22 @@ public class LogsActivity extends Activity {
 
     private LinearLayout logsContainer;
     private TextView emptyView;
-    private Button btnFilterAll;
-    private Button btnFilterInfo;
-    private Button btnFilterWarn;
-    private Button btnFilterError;
+    private TextView btnFilterAll;
+    private TextView btnFilterInfo;
+    private TextView btnFilterWarn;
+    private TextView btnFilterError;
+
+    private int dp(float dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        AppLogger.init(this);
         initThemeColors();
         buildUi();
+        AppLogger.i("LogsActivity", "Opened audit log viewer");
         refreshLogs();
     }
 
@@ -87,63 +94,72 @@ public class LogsActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(colorSurface);
-        root.setPadding(36, 48, 36, 36);
 
-        // Header with Back, Title, and Actions
+        // Fixed Top Area (Header + Search + Filter Chips)
+        LinearLayout fixedTopArea = new LinearLayout(this);
+        fixedTopArea.setOrientation(LinearLayout.VERTICAL);
+        fixedTopArea.setBackgroundColor(colorSurface);
+
+        // Header Row: Back, Title, Export, Clear
         LinearLayout headerRow = new LinearLayout(this);
         headerRow.setOrientation(LinearLayout.HORIZONTAL);
         headerRow.setGravity(Gravity.CENTER_VERTICAL);
-        headerRow.setPadding(0, 0, 0, 24);
+        headerRow.setPadding(0, 0, 0, dp(12));
+
+        ImageView btnBack = createHeaderIconButton(
+                R.drawable.ic_arrow_back,
+                getString(R.string.btn_back),
+                v -> finish()
+        );
+        headerRow.addView(btnBack);
 
         TextView tvTitle = new TextView(this);
         tvTitle.setText(R.string.logs_title);
-        tvTitle.setTextSize(20);
+        tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
         tvTitle.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         tvTitle.setTextColor(colorTextPrimary);
+        tvTitle.setPadding(dp(12), 0, dp(8), 0);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
         tvTitle.setLayoutParams(titleParams);
         headerRow.addView(tvTitle);
 
-        // Export button
-        Button btnExport = createIconButton(R.drawable.ic_share, new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                exportLogs();
-            }
-        });
-        btnExport.setContentDescription(getString(R.string.btn_export_logs));
+        ImageView btnExport = createHeaderIconButton(
+                R.drawable.ic_share,
+                getString(R.string.btn_export_logs),
+                v -> exportLogs()
+        );
         headerRow.addView(btnExport);
 
-        // Clear button
-        Button btnClear = createIconButton(R.drawable.ic_delete, new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                confirmClearLogs();
-            }
-        });
-        btnClear.setContentDescription(getString(R.string.btn_clear_logs));
+        ImageView btnClear = createHeaderIconButton(
+                R.drawable.ic_delete,
+                getString(R.string.btn_clear_logs),
+                v -> confirmClearLogs()
+        );
+        LinearLayout.LayoutParams clearParams = (LinearLayout.LayoutParams) btnClear.getLayoutParams();
+        clearParams.setMarginStart(dp(8));
+        btnClear.setLayoutParams(clearParams);
         headerRow.addView(btnClear);
 
-        root.addView(headerRow);
+        fixedTopArea.addView(headerRow);
 
         // Search Input
         EditText etSearch = new EditText(this);
         etSearch.setHint(R.string.hint_search_logs);
         etSearch.setHintTextColor(colorTextSecondary);
         etSearch.setTextColor(colorTextPrimary);
-        etSearch.setTextSize(14);
-        etSearch.setPadding(32, 24, 32, 24);
+        etSearch.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        etSearch.setPadding(dp(16), dp(8), dp(16), dp(8));
 
         GradientDrawable searchBg = new GradientDrawable();
         searchBg.setColor(colorSurfaceContainer);
-        searchBg.setCornerRadius(24);
-        searchBg.setStroke(2, colorOutline);
+        searchBg.setCornerRadius(dp(20));
+        searchBg.setStroke(dp(1), colorOutline);
         etSearch.setBackground(searchBg);
 
         LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         );
-        searchParams.setMargins(0, 0, 0, 24);
+        searchParams.setMargins(0, 0, 0, dp(10));
         etSearch.setLayoutParams(searchParams);
 
         etSearch.addTextChangedListener(new TextWatcher() {
@@ -159,12 +175,12 @@ public class LogsActivity extends Activity {
             @Override
             public void afterTextChanged(Editable s) {}
         });
-        root.addView(etSearch);
+        fixedTopArea.addView(etSearch);
 
         // Filter chips bar
         LinearLayout chipRow = new LinearLayout(this);
         chipRow.setOrientation(LinearLayout.HORIZONTAL);
-        chipRow.setPadding(0, 0, 0, 24);
+        chipRow.setPadding(0, 0, 0, dp(8));
 
         btnFilterAll = createFilterChip("ALL", AppLogger.LogLevel.ALL);
         btnFilterInfo = createFilterChip("INFO", AppLogger.LogLevel.INFO);
@@ -177,17 +193,15 @@ public class LogsActivity extends Activity {
         chipRow.addView(btnFilterError);
 
         updateChipStates();
-        root.addView(chipRow);
+        fixedTopArea.addView(chipRow);
 
-        // Empty state view
-        emptyView = new TextView(this);
-        emptyView.setText(R.string.empty_logs);
-        emptyView.setTextSize(14);
-        emptyView.setTextColor(colorTextSecondary);
-        emptyView.setGravity(Gravity.CENTER);
-        emptyView.setPadding(0, 80, 0, 80);
-        emptyView.setVisibility(View.GONE);
-        root.addView(emptyView);
+        // Subtle divider separating fixed top area from scrollable logs
+        View divider = new View(this);
+        divider.setBackgroundColor(colorOutline);
+        divider.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
+        fixedTopArea.addView(divider);
+
+        root.addView(fixedTopArea);
 
         // Scrollable Log Entries list
         ScrollView scrollView = new ScrollView(this);
@@ -195,57 +209,94 @@ public class LogsActivity extends Activity {
 
         GradientDrawable logBoxBg = new GradientDrawable();
         logBoxBg.setColor(colorSurfaceContainer);
-        logBoxBg.setCornerRadius(24);
-        logBoxBg.setStroke(2, colorOutline);
+        logBoxBg.setCornerRadius(dp(16));
+        logBoxBg.setStroke(dp(1), colorOutline);
         scrollView.setBackground(logBoxBg);
-
-        logsContainer = new LinearLayout(this);
-        logsContainer.setOrientation(LinearLayout.VERTICAL);
-        logsContainer.setPadding(24, 24, 24, 24);
-        scrollView.addView(logsContainer);
 
         LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f
         );
+        scrollParams.setMargins(dp(16), dp(8), dp(16), 0);
         scrollView.setLayoutParams(scrollParams);
+
+        logsContainer = new LinearLayout(this);
+        logsContainer.setOrientation(LinearLayout.VERTICAL);
+        logsContainer.setPadding(dp(12), dp(12), dp(12), dp(12));
+
+        // Empty state view
+        emptyView = new TextView(this);
+        emptyView.setText(R.string.empty_logs);
+        emptyView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        emptyView.setTextColor(colorTextSecondary);
+        emptyView.setGravity(Gravity.CENTER);
+        emptyView.setPadding(0, dp(60), 0, dp(60));
+        emptyView.setVisibility(View.GONE);
+        logsContainer.addView(emptyView);
+
+        scrollView.addView(logsContainer);
         root.addView(scrollView);
+
+        // WindowInsets / Safe Area Listener
+        root.setOnApplyWindowInsetsListener((v, insets) -> {
+            int top = 0;
+            int bottom = 0;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Insets sb = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                top = sb.top;
+                bottom = sb.bottom;
+            }
+            fixedTopArea.setPadding(dp(16), top + dp(10), dp(16), 0);
+            scrollParams.setMargins(dp(16), dp(8), dp(16), bottom + dp(16));
+            scrollView.setLayoutParams(scrollParams);
+            return insets;
+        });
 
         setContentView(root);
     }
 
-    private Button createIconButton(int drawableRes, View.OnClickListener onClickListener) {
-        Button btn = new Button(this);
-        btn.setBackground(getDrawable(drawableRes));
-        int sizePx = 72;
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(sizePx, sizePx);
-        params.setMarginStart(16);
-        btn.setLayoutParams(params);
-        btn.setOnClickListener(onClickListener);
-        return btn;
+    private ImageView createHeaderIconButton(int drawableRes, String contentDescription, View.OnClickListener onClickListener) {
+        ImageView iv = new ImageView(this);
+        iv.setImageResource(drawableRes);
+        iv.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        iv.setColorFilter(colorTextPrimary);
+        iv.setContentDescription(contentDescription);
+        iv.setFocusable(true);
+        iv.setClickable(true);
+
+        int size = dp(40);
+        int pad = dp(8);
+        iv.setPadding(pad, pad, pad, pad);
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(colorSurfaceContainerHigh);
+        bg.setCornerRadius(dp(20));
+        iv.setBackground(bg);
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(size, size);
+        iv.setLayoutParams(params);
+        iv.setOnClickListener(onClickListener);
+        return iv;
     }
 
-    private Button createFilterChip(final String label, final AppLogger.LogLevel level) {
-        final Button chip = new Button(this);
+    private TextView createFilterChip(final String label, final AppLogger.LogLevel level) {
+        final TextView chip = new TextView(this);
         chip.setText(label);
-        chip.setTextSize(12);
-        chip.setAllCaps(false);
-        chip.setPadding(28, 12, 28, 12);
-        chip.setMinimumHeight(0);
-        chip.setMinimumWidth(0);
+        chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        chip.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        chip.setGravity(Gravity.CENTER);
+        chip.setFocusable(true);
+        chip.setClickable(true);
 
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        );
-        params.setMarginEnd(16);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(34), 1.0f);
+        if (level != AppLogger.LogLevel.ERROR) {
+            params.setMarginEnd(dp(8));
+        }
         chip.setLayoutParams(params);
 
-        chip.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                currentLevel = level;
-                updateChipStates();
-                refreshLogs();
-            }
+        chip.setOnClickListener(v -> {
+            currentLevel = level;
+            updateChipStates();
+            refreshLogs();
         });
         return chip;
     }
@@ -257,10 +308,10 @@ public class LogsActivity extends Activity {
         applyChipStyle(btnFilterError, currentLevel == AppLogger.LogLevel.ERROR);
     }
 
-    private void applyChipStyle(Button chip, boolean isSelected) {
+    private void applyChipStyle(TextView chip, boolean isSelected) {
         if (chip == null) return;
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(20);
+        bg.setCornerRadius(dp(17));
         if (isSelected) {
             bg.setColor(colorPrimary);
             chip.setTextColor(colorOnPrimary);
@@ -268,13 +319,14 @@ public class LogsActivity extends Activity {
         } else {
             bg.setColor(colorSurfaceContainerHigh);
             chip.setTextColor(colorTextSecondary);
-            bg.setStroke(2, colorOutline);
+            bg.setStroke(dp(1), colorOutline);
         }
         chip.setBackground(bg);
     }
 
     private void refreshLogs() {
         logsContainer.removeAllViews();
+        logsContainer.addView(emptyView);
         List<AppLogger.LogEntry> entries = AppLogger.getEntries(currentLevel, currentQuery);
 
         if (entries.isEmpty()) {
@@ -286,11 +338,11 @@ public class LogsActivity extends Activity {
         for (AppLogger.LogEntry entry : entries) {
             LinearLayout entryRow = new LinearLayout(this);
             entryRow.setOrientation(LinearLayout.VERTICAL);
-            entryRow.setPadding(8, 10, 8, 10);
+            entryRow.setPadding(dp(6), dp(8), dp(6), dp(8));
 
             TextView tvMeta = new TextView(this);
             tvMeta.setTypeface(Typeface.MONOSPACE);
-            tvMeta.setTextSize(11);
+            tvMeta.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
             int metaColor = colorTextSecondary;
             if (entry.level == AppLogger.LogLevel.ERROR) metaColor = colorError;
             else if (entry.level == AppLogger.LogLevel.WARN) metaColor = colorWarn;
@@ -301,7 +353,7 @@ public class LogsActivity extends Activity {
 
             TextView tvMsg = new TextView(this);
             tvMsg.setTypeface(Typeface.MONOSPACE);
-            tvMsg.setTextSize(12);
+            tvMsg.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
             tvMsg.setTextColor(colorTextPrimary);
             tvMsg.setText(entry.message);
             tvMsg.setTextIsSelectable(true);
@@ -311,9 +363,9 @@ public class LogsActivity extends Activity {
             View divider = new View(this);
             divider.setBackgroundColor(colorOutline);
             LinearLayout.LayoutParams divParams = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, 1
+                    LinearLayout.LayoutParams.MATCH_PARENT, dp(1)
             );
-            divParams.setMargins(0, 10, 0, 0);
+            divParams.setMargins(0, dp(8), 0, 0);
             divider.setLayoutParams(divParams);
             entryRow.addView(divider);
 
@@ -330,7 +382,7 @@ public class LogsActivity extends Activity {
             shareIntent.setClipData(ClipData.newRawUri("audit_log.txt", AuditLogProvider.CONTENT_URI));
             shareIntent.putExtra(Intent.EXTRA_SUBJECT, "DebugToggle Sanitized Audit Log");
             shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(Intent.createChooser(shareIntent, "Export Sanitized Logs"));
+            startActivity(Intent.createChooser(shareIntent, getString(R.string.btn_export_logs)));
         } catch (Exception e) {
             Toast.makeText(this, "Export failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
@@ -342,6 +394,7 @@ public class LogsActivity extends Activity {
                 .setMessage(R.string.dialog_clear_msg)
                 .setPositiveButton(R.string.dialog_clear_confirm, (dialog, which) -> {
                     AppLogger.clear(LogsActivity.this);
+                    AppLogger.i("LogsActivity", "Audit log entries cleared");
                     refreshLogs();
                     Toast.makeText(LogsActivity.this, "Audit logs cleared", Toast.LENGTH_SHORT).show();
                 })
