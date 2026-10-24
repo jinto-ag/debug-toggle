@@ -210,15 +210,33 @@ public class AppLogger {
     }
 
     public static synchronized List<LogEntry> getEntries(LogLevel minLevel, String searchQuery) {
+        return getEntries(minLevel, searchQuery, true);
+    }
+
+    public static synchronized List<LogEntry> getEntries(LogLevel minLevel, String searchQuery, boolean newestFirst) {
         List<LogEntry> results = new ArrayList<>();
         String queryLower = (searchQuery != null) ? searchQuery.toLowerCase(Locale.US).trim() : "";
 
-        for (LogEntry entry : ringBuffer) {
-            if (entry.level.satisfies(minLevel)) {
-                if (queryLower.isEmpty() ||
-                        entry.message.toLowerCase(Locale.US).contains(queryLower) ||
-                        entry.tag.toLowerCase(Locale.US).contains(queryLower)) {
-                    results.add(entry);
+        if (newestFirst) {
+            java.util.Iterator<LogEntry> it = ringBuffer.descendingIterator();
+            while (it.hasNext()) {
+                LogEntry entry = it.next();
+                if (entry.level.satisfies(minLevel)) {
+                    if (queryLower.isEmpty() ||
+                            entry.message.toLowerCase(Locale.US).contains(queryLower) ||
+                            entry.tag.toLowerCase(Locale.US).contains(queryLower)) {
+                        results.add(entry);
+                    }
+                }
+            }
+        } else {
+            for (LogEntry entry : ringBuffer) {
+                if (entry.level.satisfies(minLevel)) {
+                    if (queryLower.isEmpty() ||
+                            entry.message.toLowerCase(Locale.US).contains(queryLower) ||
+                            entry.tag.toLowerCase(Locale.US).contains(queryLower)) {
+                        results.add(entry);
+                    }
                 }
             }
         }
@@ -245,6 +263,12 @@ public class AppLogger {
             } catch (Exception ignored) {
             }
         }
+    }
+
+    static synchronized void resetForTest() {
+        appContext = null;
+        ringBuffer.clear();
+        totalBytes = 0L;
     }
 
     public static synchronized File exportSanitizedLogs(Context context) throws IOException {

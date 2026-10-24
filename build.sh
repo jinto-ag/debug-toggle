@@ -26,7 +26,7 @@ KEYSTORE="$PROJECT_DIR/release.keystore"
 if [ ! -f "$KEYSTORE" ]; then
     "$KEYTOOL_BIN" -genkey -v -keystore "$KEYSTORE" \
         -alias debugtoggle -keyalg RSA -keysize 2048 -validity 10000 \
-        -storepass debugtoggle -keypass debugtoggle -dname "CN=DebugToggle,O=jinto-ag,C=US"
+        -storepass debugtoggle -keypass debugtoggle -dname "CN=DebugToggle,O=jinto-ag,C=IN"
 fi
 
 "$BUILD_TOOLS/apksigner" sign --ks "$KEYSTORE" \

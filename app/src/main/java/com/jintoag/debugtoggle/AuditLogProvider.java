@@ -2,6 +2,7 @@ package com.jintoag.debugtoggle;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
+import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
@@ -14,6 +15,16 @@ public class AuditLogProvider extends ContentProvider {
     public static final Uri CONTENT_URI = Uri.parse("content://" + AUTHORITY + "/audit_log.txt");
     public static final Uri APK_CONTENT_URI = Uri.parse("content://" + AUTHORITY + "/DebugToggle.apk");
 
+    private Context contextOverride;
+
+    void setContextForTest(Context context) {
+        this.contextOverride = context;
+    }
+
+    private Context getSafeContext() {
+        return contextOverride != null ? contextOverride : getContext();
+    }
+
     @Override
     public boolean onCreate() {
         return true;
@@ -21,18 +32,19 @@ public class AuditLogProvider extends ContentProvider {
 
     @Override
     public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
-        if (getContext() == null) {
+        Context ctx = getSafeContext();
+        if (ctx == null) {
             throw new FileNotFoundException("Context unavailable");
         }
         boolean isApk = uri != null && uri.getPath() != null && uri.getPath().endsWith(".apk");
         File file;
         if (isApk) {
-            file = new File(getContext().getCacheDir(), "DebugToggle.apk");
+            file = new File(ctx.getCacheDir(), "DebugToggle.apk");
             if (!file.exists()) {
-                file = new File(getContext().getApplicationInfo().sourceDir);
+                file = new File(ctx.getApplicationInfo().sourceDir);
             }
         } else {
-            file = new File(getContext().getCacheDir(), "debugtoggle_audit_log.txt");
+            file = new File(ctx.getCacheDir(), "debugtoggle_audit_log.txt");
         }
 
         if (!file.exists()) {
@@ -51,18 +63,19 @@ public class AuditLogProvider extends ContentProvider {
 
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
-        if (getContext() == null) return null;
+        Context ctx = getSafeContext();
+        if (ctx == null) return null;
         boolean isApk = uri != null && uri.getPath() != null && uri.getPath().endsWith(".apk");
         File file;
         String defaultName;
         if (isApk) {
-            file = new File(getContext().getCacheDir(), "DebugToggle.apk");
+            file = new File(ctx.getCacheDir(), "DebugToggle.apk");
             if (!file.exists()) {
-                file = new File(getContext().getApplicationInfo().sourceDir);
+                file = new File(ctx.getApplicationInfo().sourceDir);
             }
             defaultName = "DebugToggle.apk";
         } else {
-            file = new File(getContext().getCacheDir(), "debugtoggle_audit_log.txt");
+            file = new File(ctx.getCacheDir(), "debugtoggle_audit_log.txt");
             defaultName = "debugtoggle_audit_log.txt";
         }
 
@@ -72,13 +85,15 @@ public class AuditLogProvider extends ContentProvider {
         };
         android.database.MatrixCursor cursor = new android.database.MatrixCursor(columns, 1);
         android.database.MatrixCursor.RowBuilder row = cursor.newRow();
-        for (String col : columns) {
-            if (android.provider.OpenableColumns.DISPLAY_NAME.equals(col)) {
-                row.add(defaultName);
-            } else if (android.provider.OpenableColumns.SIZE.equals(col)) {
-                row.add(file.exists() ? file.length() : 0L);
-            } else {
-                row.add(null);
+        if (row != null) {
+            for (String col : columns) {
+                if (android.provider.OpenableColumns.DISPLAY_NAME.equals(col)) {
+                    row.add(defaultName);
+                } else if (android.provider.OpenableColumns.SIZE.equals(col)) {
+                    row.add(file.exists() ? file.length() : 0L);
+                } else {
+                    row.add(null);
+                }
             }
         }
         return cursor;
