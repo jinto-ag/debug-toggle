@@ -33,19 +33,24 @@ jobs:
 
       - name: Determine Version and Tag
         id: version_check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          FORCE_RELEASE: ${{ github.event.inputs.force_release }}
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
           TAG_NAME="v${PKG_VERSION}"
           echo "Package version: $PKG_VERSION"
           echo "Target tag: $TAG_NAME"
 
-          if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "Triggered by tag push: ${{ github.ref_name }}"
+          if [ "$EVENT_NAME" = "push" ] && [[ "$REF" == refs/tags/* ]]; then
+            echo "Triggered by tag push: $REF_NAME"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "release_tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "release_tag=$REF_NAME" >> "$GITHUB_OUTPUT"
           elif git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
             echo "Tag $TAG_NAME already exists."
-            if [ "${{ github.event.inputs.force_release }}" = "true" ]; then
+            if [ "$FORCE_RELEASE" = "true" ]; then
               echo "Force release requested."
               echo "should_release=true" >> "$GITHUB_OUTPUT"
               echo "release_tag=${TAG_NAME}" >> "$GITHUB_OUTPUT"

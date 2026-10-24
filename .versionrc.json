@@ -15,6 +15,6 @@
     { "type": "security", "section": "Security", "hidden": false }
   ],
   "scripts": {
-    "postbump": "bun run scripts/sync-version.js && git add app/build.gradle.kts build.sh"
+    "postbump": "bun run scripts/sync-version.js && bun run format && git add -A"
   }
 }
