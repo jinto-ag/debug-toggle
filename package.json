@@ -1,0 +1,25 @@
+{
+  "name": "@jinto-ag/debug-toggle",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "scripts": {
+    "build": "nx run @jinto-ag/debug-toggle:build",
+    "test": "nx run @jinto-ag/debug-toggle:test",
+    "test:e2e": "nx run @jinto-ag/debug-toggle:test:e2e",
+    "lint": "nx run @jinto-ag/debug-toggle:lint",
+    "lint:secrets": "nx run @jinto-ag/debug-toggle:lint:secrets",
+    "format": "nx run @jinto-ag/debug-toggle:format",
+    "format:check": "nx run @jinto-ag/debug-toggle:format:check",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.2",
+    "@nx/devkit": "^23.3.1",
+    "@secretlint/secretlint-rule-preset-recommend": "^13.0.7",
+    "husky": "^9.1.7",
+    "nx": "^23.3.1",
+    "secretlint": "^13.0.7"
+  }
+}

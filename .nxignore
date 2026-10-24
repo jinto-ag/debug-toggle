@@ -1,0 +1,10 @@
+.gradle/
+build/intermediates/
+build/tmp/
+app/build/intermediates/
+app/build/tmp/
+.husky/
+.superpowers/
+release.keystore
+*.log
+DebugToggle-release.apk.idsig

@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Node Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Release APK
+        run: |
+          chmod +x gradlew build.sh
+          bun run build
+
+      - name: Generate Checksums
+        run: |
+          sha256sum DebugToggle-release.apk > DebugToggle-release.apk.sha256
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            DebugToggle-release.apk
+            DebugToggle-release.apk.sha256
+          name: DebugToggle ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true

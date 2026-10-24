@@ -1,0 +1,43 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "defaultBase": "main",
+  "maxCacheSize": "5GB",
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "production": [
+      "default",
+      "!{projectRoot}/.nx/**/*",
+      "!{projectRoot}/.husky/**/*",
+      "!{projectRoot}/.superpowers/**/*"
+    ],
+    "sharedGlobals": [
+      "{workspaceRoot}/nx.json",
+      "{workspaceRoot}/project.json",
+      "{workspaceRoot}/package.json",
+      "{workspaceRoot}/biome.json"
+    ]
+  },
+  "targetDefaults": {
+    "build": {
+      "cache": true,
+      "inputs": ["production"]
+    },
+    "test": {
+      "cache": true,
+      "inputs": ["default"]
+    },
+    "lint": {
+      "cache": true,
+      "inputs": ["default"]
+    },
+    "lint:secrets": {
+      "cache": true,
+      "inputs": ["default"]
+    },
+    "format:check": {
+      "cache": true,
+      "inputs": ["default"]
+    }
+  },
+  "analytics": false
+}

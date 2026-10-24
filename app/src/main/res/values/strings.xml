@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DebugToggle</string>
+    <string name="tile_usb_name">USB Debug</string>
+    <string name="tile_wifi_name">Wireless ADB</string>
+
+    <string name="title_dev_options">Developer Options</string>
+    <string name="desc_dev_options">Master switch for Android developer settings</string>
+
+    <string name="title_usb_debug">USB Debugging</string>
+    <string name="desc_usb_debug">ADB communication interface via USB cable</string>
+
+    <string name="title_wifi_debug">Wireless Debugging</string>
+    <string name="desc_wifi_debug">TCP/IP network ADB bridge over Wi-Fi</string>
+
+    <string name="title_auth_timeout">Disable Auth Timeout</string>
+    <string name="desc_auth_timeout">Prevent automatic 7-day ADB key revocation</string>
+
+    <string name="btn_enable_all">Enable All Debugging</string>
+    <string name="btn_revoke_auth">Revoke Authorizations</string>
+    <string name="btn_open_dev">Open Developer Options</string>
+
+    <string name="logs_title">Audit &amp; Diagnostics Logs</string>
+    <string name="btn_view_logs">View Audit Logs</string>
+    <string name="btn_export_logs">Export Sanitized Logs</string>
+    <string name="btn_clear_logs">Clear Logs</string>
+    <string name="btn_report_bug">Report Bug (GitHub)</string>
+    <string name="btn_report_security">Report Security Vulnerability</string>
+    <string name="hint_search_logs">Search logs by keyword or tag…</string>
+    <string name="empty_logs">No audit logs matching current filter.</string>
+    <string name="dialog_clear_title">Clear Audit Logs?</string>
+    <string name="dialog_clear_msg">Are you sure you want to clear all in-memory audit log entries?</string>
+    <string name="dialog_clear_confirm">Clear</string>
+    <string name="dialog_cancel">Cancel</string>
+</resources>

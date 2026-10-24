@@ -1,0 +1,2 @@
+bun x nx run @jinto-ag/debug-toggle:lint:secrets
+bun x nx run @jinto-ag/debug-toggle:test
