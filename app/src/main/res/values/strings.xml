@@ -37,6 +37,15 @@
     <string name="action_revoke_auth_toast">Tap \'Revoke USB debugging authorisations\' in Settings</string>
     <string name="perm_error_msg">Permission required: adb shell pm grant com.jintoag.debugtoggle android.permission.WRITE_SECURE_SETTINGS</string>
 
+    <string name="section_about_share">ABOUT &amp; SHARE</string>
+    <string name="btn_share_app">Share App (APK)</string>
+    <string name="share_app_chooser">Share DebugToggle APK</string>
+    <string name="share_app_text">DebugToggle - Fast ADB &amp; Wireless Debugging Switch for Android\nhttps://github.com/jinto-ag/debug-toggle</string>
+    <string name="share_error_toast">Could not share APK: %1$s</string>
+    <string name="btn_back">Navigate back</string>
+    <string name="app_version_fmt">DebugToggle v%1$s (Build %2$d)</string>
+    <string name="app_author">Open source by Jinto AG</string>
+
     <string name="logs_title">Audit &amp; Diagnostics Logs</string>
     <string name="btn_view_logs">View Audit Logs</string>
     <string name="btn_export_logs">Export Sanitized Logs</string>

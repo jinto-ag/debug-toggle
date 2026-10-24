@@ -71,6 +71,79 @@ public class AppLogger {
 
     private static final Deque<LogEntry> ringBuffer = new ArrayDeque<>(MAX_CAPACITY);
     private static long totalBytes = 0L;
+    private static Context appContext = null;
+    private static final String HISTORY_FILE = "audit_history.log";
+
+    public static synchronized void init(Context context) {
+        if (context == null) return;
+        if (appContext == null) {
+            appContext = context.getApplicationContext();
+            loadHistory(appContext);
+        }
+        if (ringBuffer.isEmpty()) {
+            i("System", "Audit logging engine ready (ZDR privacy filter active)");
+        }
+    }
+
+    private static synchronized void loadHistory(Context context) {
+        File file = new File(context.getFilesDir(), HISTORY_FILE);
+        if (!file.exists()) return;
+
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(new java.io.FileInputStream(file), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                int firstPipe = line.indexOf('|');
+                if (firstPipe == -1) continue;
+                int secondPipe = line.indexOf('|', firstPipe + 1);
+                if (secondPipe == -1) continue;
+                int thirdPipe = line.indexOf('|', secondPipe + 1);
+                if (thirdPipe == -1) continue;
+
+                long ts = Long.parseLong(line.substring(0, firstPipe));
+                LogLevel level = LogLevel.valueOf(line.substring(firstPipe + 1, secondPipe));
+                String tag = line.substring(secondPipe + 1, thirdPipe);
+                String msg = line.substring(thirdPipe + 1);
+
+                int entryBytes = msg.length() + tag.length() + 32;
+                while (!ringBuffer.isEmpty() && (ringBuffer.size() >= MAX_CAPACITY || (totalBytes + entryBytes > MAX_BYTE_CAPACITY))) {
+                    LogEntry evicted = ringBuffer.pollFirst();
+                    if (evicted != null) {
+                        totalBytes = Math.max(0L, totalBytes - (evicted.message.length() + evicted.tag.length() + 32));
+                    }
+                }
+                ringBuffer.addLast(new LogEntry(ts, level, tag, msg));
+                totalBytes += entryBytes;
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static synchronized void appendToHistory(LogEntry entry) {
+        if (appContext == null) return;
+        try {
+            File file = new File(appContext.getFilesDir(), HISTORY_FILE);
+            if (file.length() > MAX_BYTE_CAPACITY) {
+                rewriteHistory(file);
+                return;
+            }
+            try (FileOutputStream fos = new FileOutputStream(file, true)) {
+                String line = entry.timestamp + "|" + entry.level.name() + "|" + entry.tag + "|" + entry.message + "\n";
+                fos.write(line.getBytes(StandardCharsets.UTF_8));
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static synchronized void rewriteHistory(File file) {
+        try (FileOutputStream fos = new FileOutputStream(file, false)) {
+            for (LogEntry entry : ringBuffer) {
+                String line = entry.timestamp + "|" + entry.level.name() + "|" + entry.tag + "|" + entry.message + "\n";
+                fos.write(line.getBytes(StandardCharsets.UTF_8));
+            }
+        } catch (Exception ignored) {
+        }
+    }
 
     public static synchronized long getTotalBytes() {
         return totalBytes;
@@ -120,8 +193,10 @@ public class AppLogger {
                 totalBytes = Math.max(0L, totalBytes - (evicted.message.length() + evicted.tag.length() + 32));
             }
         }
-        ringBuffer.addLast(new LogEntry(System.currentTimeMillis(), level, tag, cleanMessage));
+        LogEntry entry = new LogEntry(System.currentTimeMillis(), level, tag, cleanMessage);
+        ringBuffer.addLast(entry);
         totalBytes += entryBytes;
+        appendToHistory(entry);
     }
 
     public static String sanitize(String input) {
@@ -162,6 +237,10 @@ public class AppLogger {
                 File logFile = new File(context.getCacheDir(), "debugtoggle_audit_log.txt");
                 if (logFile.exists()) {
                     logFile.delete();
+                }
+                File historyFile = new File(context.getFilesDir(), HISTORY_FILE);
+                if (historyFile.exists()) {
+                    historyFile.delete();
                 }
             } catch (Exception ignored) {
             }

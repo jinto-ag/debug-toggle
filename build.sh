@@ -10,7 +10,9 @@ else
     BUILD_TOOLS=$(find "$ANDROID_SDK/build-tools" -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n 1)
 fi
 
-if [ -f "$ANDROID_SDK/platforms/android-34/android.jar" ]; then
+if [ -f "$ANDROID_SDK/platforms/android-35/android.jar" ]; then
+    PLATFORM="$ANDROID_SDK/platforms/android-35/android.jar"
+elif [ -f "$ANDROID_SDK/platforms/android-34/android.jar" ]; then
     PLATFORM="$ANDROID_SDK/platforms/android-34/android.jar"
 else
     PLATFORM=$(find "$ANDROID_SDK/platforms" -name "android.jar" 2>/dev/null | sort -V | tail -n 1)
