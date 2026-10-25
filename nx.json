@@ -1,14 +1,29 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "defaultBase": "main",
+  "cacheDirectory": ".nx/cache",
   "maxCacheSize": "5GB",
   "namedInputs": {
-    "default": ["{projectRoot}/**/*", "sharedGlobals"],
-    "production": [
-      "default",
+    "default": [
+      "{projectRoot}/**/*",
+      "!{projectRoot}/build/**/*",
+      "!{projectRoot}/app/build/**/*",
+      "!{projectRoot}/.gradle/**/*",
       "!{projectRoot}/.nx/**/*",
       "!{projectRoot}/.husky/**/*",
-      "!{projectRoot}/.superpowers/**/*"
+      "!{projectRoot}/.superpowers/**/*",
+      "!{projectRoot}/docs/superpowers/**/*",
+      "!{projectRoot}/*.apk",
+      "!{projectRoot}/*.idsig",
+      "!{projectRoot}/*.sha256",
+      "!{projectRoot}/release.keystore",
+      "!{projectRoot}/**/*.log",
+      "sharedGlobals"
+    ],
+    "production": [
+      "default",
+      "!{projectRoot}/**/*.md",
+      "!{projectRoot}/app/src/test*/**/*"
     ],
     "sharedGlobals": [
       "{workspaceRoot}/nx.json",

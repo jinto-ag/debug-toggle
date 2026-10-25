@@ -17,6 +17,15 @@ elif command -v keytool >/dev/null 2>&1; then
     KEYTOOL_BIN=$(command -v keytool)
 fi
 
+VERSION=$(node -p "require('$PROJECT_DIR/package.json').version")
+DIST_DIR="$PROJECT_DIR/dist"
+mkdir -p "$DIST_DIR"
+
+VERSIONED_APK="$PROJECT_DIR/DebugToggle-v${VERSION}.apk"
+DIST_VERSIONED_APK="$DIST_DIR/DebugToggle-v${VERSION}.apk"
+RELEASE_APK="$PROJECT_DIR/DebugToggle-release.apk"
+DIST_RELEASE_APK="$DIST_DIR/DebugToggle-release.apk"
+
 echo "1. Gradle assembleRelease..."
 "$PROJECT_DIR/gradlew" assembleRelease --no-daemon
 
@@ -32,8 +41,27 @@ fi
 "$BUILD_TOOLS/apksigner" sign --ks "$KEYSTORE" \
     --ks-pass pass:debugtoggle \
     --key-pass pass:debugtoggle \
-    --out "$PROJECT_DIR/DebugToggle-release.apk" \
+    --out "$VERSIONED_APK" \
     "$UNSIGNED_APK"
 
-echo "SUCCESS! Output: $PROJECT_DIR/DebugToggle-release.apk"
-ls -lh "$PROJECT_DIR/DebugToggle-release.apk"
+# Copy to dist and release copies
+cp "$VERSIONED_APK" "$DIST_VERSIONED_APK"
+cp "$VERSIONED_APK" "$RELEASE_APK"
+cp "$VERSIONED_APK" "$DIST_RELEASE_APK"
+
+if [ -f "${VERSIONED_APK}.idsig" ]; then
+    cp "${VERSIONED_APK}.idsig" "$DIST_DIR/"
+    cp "${VERSIONED_APK}.idsig" "${RELEASE_APK}.idsig"
+fi
+
+# Generate SHA256 checksums
+(cd "$PROJECT_DIR" && sha256sum "DebugToggle-v${VERSION}.apk" > "DebugToggle-v${VERSION}.apk.sha256")
+(cd "$PROJECT_DIR" && sha256sum "DebugToggle-release.apk" > "DebugToggle-release.apk.sha256")
+cp "$PROJECT_DIR/DebugToggle-v${VERSION}.apk.sha256" "$DIST_DIR/"
+cp "$PROJECT_DIR/DebugToggle-release.apk.sha256" "$DIST_DIR/"
+
+echo "SUCCESS! Outputs:"
+echo " - $VERSIONED_APK"
+echo " - $RELEASE_APK"
+echo " - $DIST_VERSIONED_APK"
+ls -lh "$VERSIONED_APK" "$RELEASE_APK"
