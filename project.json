@@ -4,11 +4,19 @@
   "targets": {
     "build": {
       "command": "./build.sh",
-      "outputs": ["{workspaceRoot}/DebugToggle-release.apk"]
+      "outputs": [
+        "{workspaceRoot}/dist",
+        "{workspaceRoot}/DebugToggle-release.apk",
+        "{workspaceRoot}/DebugToggle-release.apk.idsig",
+        "{workspaceRoot}/DebugToggle-release.apk.sha256"
+      ]
     },
     "test": {
-      "command": "./gradlew test",
-      "outputs": ["{workspaceRoot}/app/build/reports/tests"]
+      "command": "./gradlew test && bun test scripts/",
+      "outputs": [
+        "{workspaceRoot}/app/build/reports/tests",
+        "{workspaceRoot}/app/build/reports/jacoco"
+      ]
     },
     "test:e2e": {
       "command": "./scripts/test-e2e.sh",

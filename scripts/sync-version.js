@@ -36,19 +36,3 @@ if (fs.existsSync(gradlePath)) {
   fs.writeFileSync(gradlePath, content, "utf8");
   console.log(`Updated ${gradlePath}`);
 }
-
-// 2. Update build.sh
-const buildShPath = path.join(rootDir, "build.sh");
-if (fs.existsSync(buildShPath)) {
-  let content = fs.readFileSync(buildShPath, "utf8");
-  content = content.replace(
-    /--version-code \d+/,
-    `--version-code ${newVersionCode}`,
-  );
-  content = content.replace(
-    /--version-name "[^"]+"/,
-    `--version-name "${newVersion}"`,
-  );
-  fs.writeFileSync(buildShPath, content, "utf8");
-  console.log(`Updated ${buildShPath}`);
-}

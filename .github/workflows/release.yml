@@ -1,110 +1,195 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - "v*"
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
-      force_release:
-        description: "Force release build even if tag already exists"
+      bump_type:
+        description: "Semantic bump level (auto, patch, minor, major)"
         required: false
-        type: boolean
-        default: false
+        default: "auto"
+        type: choice
+        options:
+          - auto
+          - patch
+          - minor
+          - major
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
   release:
+    name: Generate Release & Changelog
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      !contains(github.event.workflow_run.head_commit.message, 'chore(release):') &&
+      !contains(github.event.workflow_run.head_commit.message, '[skip ci]'))
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      should_publish: ${{ steps.bump.outputs.should_publish }}
+      release_version: ${{ steps.bump.outputs.release_version }}
+      release_tag: ${{ steps.bump.outputs.release_tag }}
+
     steps:
-      - name: Checkout Code
+      - name: Checkout Code with Full History
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Determine Version and Tag
-        id: version_check
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          REF: ${{ github.ref }}
-          REF_NAME: ${{ github.ref_name }}
-          FORCE_RELEASE: ${{ github.event.inputs.force_release }}
-        run: |
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          TAG_NAME="v${PKG_VERSION}"
-          echo "Package version: $PKG_VERSION"
-          echo "Target tag: $TAG_NAME"
+      - name: Cache Bun Dependencies
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
-          if [ "$EVENT_NAME" = "push" ] && [[ "$REF" == refs/tags/* ]]; then
-            echo "Triggered by tag push: $REF_NAME"
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "release_tag=$REF_NAME" >> "$GITHUB_OUTPUT"
-          elif git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-            echo "Tag $TAG_NAME already exists."
-            if [ "$FORCE_RELEASE" = "true" ]; then
-              echo "Force release requested."
-              echo "should_release=true" >> "$GITHUB_OUTPUT"
-              echo "release_tag=${TAG_NAME}" >> "$GITHUB_OUTPUT"
-            else
-              echo "No new version to release. Skipping release job."
-              echo "should_release=false" >> "$GITHUB_OUTPUT"
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Configure Git Identity
+        run: |
+          git config user.name "Jinto AG"
+          git config user.email "jinto-ag@users.noreply.github.com"
+
+      - name: Evaluate Releasability and Bump Version
+        id: bump
+        run: |
+          bun run scripts/release-check.ts --github-output
+
+          # If triggered automatically without explicit bump override and not releasable, exit early
+          if [ -z "${{ github.event.inputs.bump_type }}" ] || [ "${{ github.event.inputs.bump_type }}" = "auto" ]; then
+            if grep -q "releasable=false" "$GITHUB_OUTPUT"; then
+              echo "ℹ️  No releasable commits detected by release-check. Exiting cleanly."
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
             fi
-          else
-            echo "New version detected: $PKG_VERSION (Tag $TAG_NAME does not exist)"
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
-            git push origin "$TAG_NAME"
-            echo "Created and pushed tag $TAG_NAME"
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "release_tag=${TAG_NAME}" >> "$GITHUB_OUTPUT"
           fi
 
+          # Determine bump flag
+          BUMP_FLAG=""
+          case "${{ github.event.inputs.bump_type }}" in
+            major) BUMP_FLAG="--release-as major" ;;
+            minor) BUMP_FLAG="--release-as minor" ;;
+            patch) BUMP_FLAG="--release-as patch" ;;
+            *) BUMP_FLAG="--noBumpWhenEmptyChanges" ;;
+          esac
+
+          PREV_VERSION=$(node -p "require('./package.json').version")
+          echo "Previous version: $PREV_VERSION"
+
+          # Execute release bump & changelog generation
+          bunx commit-and-tag-version $BUMP_FLAG
+
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "Evaluated version: $NEW_VERSION"
+
+          if [ "$PREV_VERSION" = "$NEW_VERSION" ] && [ "${{ github.event.inputs.bump_type }}" != "major" ] && [ "${{ github.event.inputs.bump_type }}" != "minor" ] && [ "${{ github.event.inputs.bump_type }}" != "patch" ]; then
+            echo "ℹ️  No version changes to release."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          TAG="v${NEW_VERSION}"
+
+          # Interrogate remote to prevent race conditions
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::warning::Tag ${TAG} already exists on origin. Skipping push."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Push release commit and tag to main
+          git push origin main "refs/tags/${TAG}"
+          echo "🚀 Successfully pushed release commit and tag ${TAG}"
+
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          echo "release_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Build & Publish Release Artifacts
+    needs: release
+    if: needs.release.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout the Release Tag
+        uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ needs.release.outputs.release_tag }}
+
       - name: Set up JDK 21
-        if: steps.version_check.outputs.should_release == 'true'
         uses: actions/setup-java@v6
         with:
           java-version: "21"
           distribution: "temurin"
+          cache: "gradle"
 
       - name: Setup Android SDK Licenses
-        if: steps.version_check.outputs.should_release == 'true'
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun Dependencies
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install Node Dependencies
-        if: steps.version_check.outputs.should_release == 'true'
         run: bun install --frozen-lockfile
 
+      - name: Cache Nx Task Cache
+        uses: actions/cache@v6
+        with:
+          path: .nx/cache
+          key: ${{ runner.os }}-nx-${{ needs.release.outputs.release_tag }}
+          restore-keys: |
+            ${{ runner.os }}-nx-${{ github.sha }}
+            ${{ runner.os }}-nx-
+
       - name: Build Release APK
-        if: steps.version_check.outputs.should_release == 'true'
         run: |
           chmod +x gradlew build.sh
           bun run build
 
-      - name: Generate Checksums
-        if: steps.version_check.outputs.should_release == 'true'
-        run: |
-          sha256sum DebugToggle-release.apk > DebugToggle-release.apk.sha256
-
       - name: Create GitHub Release
-        if: steps.version_check.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.version_check.outputs.release_tag }}
-          name: DebugToggle ${{ steps.version_check.outputs.release_tag }}
+          tag_name: ${{ needs.release.outputs.release_tag }}
+          name: DebugToggle ${{ needs.release.outputs.release_tag }}
           files: |
-            DebugToggle-release.apk
-            DebugToggle-release.apk.sha256
+            dist/DebugToggle-v${{ needs.release.outputs.release_version }}.apk
+            dist/DebugToggle-v${{ needs.release.outputs.release_version }}.apk.sha256
+            dist/DebugToggle-release.apk
+            dist/DebugToggle-release.apk.sha256
           draft: false
           prerelease: false
           generate_release_notes: true
