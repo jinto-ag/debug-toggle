@@ -2,6 +2,13 @@
 
 All notable changes to DebugToggle are documented in this file.
 
+## [1.1.2](https://github.com/jinto-ag/debug-toggle/compare/v1.1.1...v1.1.2) (2026-10-25)
+
+### Bug Fixes
+
+- **app:** fix permission grant flow, add package visibility, and root fallback ([#14](https://github.com/jinto-ag/debug-toggle/issues/14)) ([91013af](https://github.com/jinto-ag/debug-toggle/commit/91013afac8b6a781edbf45e0d10733a55f0fcd9b))
+- **ci:** format changelog and trigger format on postchangelog ([#13](https://github.com/jinto-ag/debug-toggle/issues/13)) ([3700d37](https://github.com/jinto-ag/debug-toggle/commit/3700d37f45fa61db19025d8d6d4ea22b35d8331d))
+
 ## [1.1.1](https://github.com/jinto-ag/debug-toggle/compare/v1.1.0...v1.1.1) (2026-10-24)
 
 ### Bug Fixes
