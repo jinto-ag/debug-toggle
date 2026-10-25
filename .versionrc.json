@@ -1,6 +1,8 @@
 {
   "commitAll": true,
   "header": "# Changelog\n\nAll notable changes to DebugToggle are documented in this file.\n",
+  "releaseCommitMessageFormat": "chore(release): {{currentTag}} [skip ci]",
+  "noBumpWhenEmptyChanges": true,
   "types": [
     { "type": "feat", "section": "Features" },
     { "type": "fix", "section": "Bug Fixes" },
