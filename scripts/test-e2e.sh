@@ -29,8 +29,14 @@ if [ "$1" == "--emulator" ] || [ -n "$USE_EMULATOR" ]; then
         echo "Waiting for emulator to boot..."
         adb wait-for-device
         TARGET_DEVICE=$(adb devices | grep -E "emulator-[0-9]+" | awk '{print $1}' | head -n 1 || true)
+        WAIT_COUNT=0
         until [ "$(adb -s "$TARGET_DEVICE" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]; do
             sleep 2
+            WAIT_COUNT=$((WAIT_COUNT + 1))
+            if [ "$WAIT_COUNT" -gt 60 ]; then
+                echo "ERROR: Emulator failed to boot within 120 seconds."
+                exit 1
+            fi
         done
         echo "Emulator booted ($TARGET_DEVICE)."
     fi
@@ -139,17 +145,17 @@ fi
 MAIN_LAUNCH=$($ADB_CMD shell am start -W -n com.jintoag.debugtoggle/.MainActivity 2>&1 || true)
 assert_contains "MainActivity launched successfully" "Status: ok" "$MAIN_LAUNCH"
 
-# Test 9: Activity launch lifecycle (LogsActivity)
+# Test 9: Activity access control enforcement (LogsActivity)
 LOGS_LAUNCH=$($ADB_CMD shell am start -W -n com.jintoag.debugtoggle/.LogsActivity 2>&1 || true)
-assert_contains "LogsActivity launched successfully" "Status: ok" "$LOGS_LAUNCH"
+assert_contains "LogsActivity access control enforced (unexported)" "SecurityException" "$LOGS_LAUNCH"
 
-# Test 10: ContentProvider Audit Log query
+# Test 10: ContentProvider authority registration
+CONTENT_PROVIDER_REG=$($ADB_CMD shell dumpsys package com.jintoag.debugtoggle | grep "com.jintoag.debugtoggle.logs" || true)
+assert_contains "AuditLogProvider authority registered in system" "com.jintoag.debugtoggle.logs" "$CONTENT_PROVIDER_REG"
+
+# Test 11: ContentProvider access control enforcement
 CONTENT_QUERY_LOG=$($ADB_CMD shell content query --uri content://com.jintoag.debugtoggle.logs/audit_log.txt 2>&1 || true)
-assert_contains "AuditLogProvider responds to audit_log.txt URI" "_display_name=debugtoggle_audit_log.txt" "$CONTENT_QUERY_LOG"
-
-# Test 11: ContentProvider APK query
-CONTENT_QUERY_APK=$($ADB_CMD shell content query --uri content://com.jintoag.debugtoggle.logs/DebugToggle.apk 2>&1 || true)
-assert_contains "AuditLogProvider responds to DebugToggle.apk URI" "_display_name=DebugToggle.apk" "$CONTENT_QUERY_APK"
+assert_contains "AuditLogProvider access control enforced (unexported)" "SecurityException" "$CONTENT_QUERY_LOG"
 
 # Test 12: Developer Options system intent resolution
 DEV_INTENT_RES=$($ADB_CMD shell cmd package resolve-activity --brief -a android.settings.APPLICATION_DEVELOPMENT_SETTINGS 2>&1 || true)

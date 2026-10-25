@@ -31,7 +31,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
+      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
       !contains(github.event.workflow_run.head_commit.message, 'chore(release):') &&
       !contains(github.event.workflow_run.head_commit.message, '[skip ci]'))
     runs-on: ubuntu-latest
@@ -77,7 +77,7 @@ jobs:
           # If triggered automatically without explicit bump override and not releasable, exit early
           if [ -z "${{ github.event.inputs.bump_type }}" ] || [ "${{ github.event.inputs.bump_type }}" = "auto" ]; then
             if grep -q "releasable=false" "$GITHUB_OUTPUT"; then
-              echo "ℹ️  No releasable commits detected by release-check. Exiting cleanly."
+              echo "ℹ️  No releasable app changes detected by release-check. Exiting cleanly."
               echo "should_publish=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -116,8 +116,8 @@ jobs:
             exit 0
           fi
 
-          # Push release commit and tag to main
-          git push origin main "refs/tags/${TAG}"
+          # Push release commit and tag to main (HEAD:main handles detached HEAD runners)
+          git push origin HEAD:main "refs/tags/${TAG}"
           echo "🚀 Successfully pushed release commit and tag ${TAG}"
 
           echo "should_publish=true" >> "$GITHUB_OUTPUT"
@@ -132,6 +132,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+    env:
+      NX_REJECT_UNKNOWN_LOCAL_CACHE: "0"
 
     steps:
       - name: Checkout the Release Tag
@@ -144,11 +146,17 @@ jobs:
         with:
           java-version: "21"
           distribution: "temurin"
-          cache: "gradle"
 
-      - name: Setup Android SDK Licenses
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Ensure Android SDK Licenses
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          if [ ! -d "$ANDROID_HOME/licenses" ] || [ ! -f "$ANDROID_HOME/licenses/android-sdk-license" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          fi
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -166,10 +174,12 @@ jobs:
       - name: Install Node Dependencies
         run: bun install --frozen-lockfile
 
-      - name: Cache Nx Task Cache
+      - name: Cache Nx Computation Cache
         uses: actions/cache@v6
         with:
-          path: .nx/cache
+          path: |
+            .nx/cache
+            .nx/workspace-data
           key: ${{ runner.os }}-nx-${{ needs.release.outputs.release_tag }}
           restore-keys: |
             ${{ runner.os }}-nx-${{ github.sha }}
