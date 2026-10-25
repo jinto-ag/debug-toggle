@@ -2,6 +2,12 @@
 
 All notable changes to DebugToggle are documented in this file.
 
+## [1.2.0](https://github.com/jinto-ag/debug-toggle/compare/v1.1.2...v1.2.0) (2026-10-25)
+
+### Features
+
+- **ci:** add layered caching, versioned apk outputs, and autonomous release pipeline ([#15](https://github.com/jinto-ag/debug-toggle/issues/15)) ([217cef5](https://github.com/jinto-ag/debug-toggle/commit/217cef561f4c5c521d5e3804715cdbc4b823749c))
+
 ## [1.1.2](https://github.com/jinto-ag/debug-toggle/compare/v1.1.1...v1.1.2) (2026-10-25)
 
 ### Bug Fixes
