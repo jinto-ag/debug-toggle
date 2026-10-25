@@ -22,6 +22,7 @@ jobs:
         with:
           java-version: "21"
           distribution: "temurin"
+          cache: "gradle"
 
       - name: Setup Android SDK Licenses
         run: |
@@ -32,8 +33,25 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Cache Bun Dependencies
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install Node Dependencies
         run: bun install --frozen-lockfile
+
+      - name: Cache Nx Task Cache
+        uses: actions/cache@v6
+        with:
+          path: .nx/cache
+          key: ${{ runner.os }}-nx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-nx-${{ github.event.pull_request.base.sha || github.event.before || 'main' }}
+            ${{ runner.os }}-nx-
 
       - name: Secret Hygiene Check
         run: bun run lint:secrets
@@ -47,9 +65,13 @@ jobs:
       - name: Build Release APK
         run: bun run build
 
-      - name: Upload Release Artifact
+      - name: Upload Release Artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: DebugToggle-release
-          path: DebugToggle-release.apk
+          name: DebugToggle-release-artifacts
+          path: |
+            DebugToggle-release.apk
+            DebugToggle-release.apk.sha256
+            DebugToggle-v*.apk
+            DebugToggle-v*.apk.sha256
           retention-days: 7
