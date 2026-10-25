@@ -13,9 +13,9 @@ const newVersion = pkg.version;
 
 // Parse semver parts: major.minor.patch
 const parts = newVersion.split(".").map(Number);
-const major = parts[0] || 1;
-const minor = parts[1] || 0;
-const patch = parts[2] || 0;
+const major = Number.isFinite(parts[0]) ? parts[0] : 1;
+const minor = Number.isFinite(parts[1]) ? parts[1] : 0;
+const patch = Number.isFinite(parts[2]) ? parts[2] : 0;
 // Semantic versionCode: major * 10000 + minor * 100 + patch
 const newVersionCode = major * 10000 + minor * 100 + patch;
 

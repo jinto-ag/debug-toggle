@@ -13,6 +13,8 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      NX_REJECT_UNKNOWN_LOCAL_CACHE: "0"
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
@@ -22,11 +24,17 @@ jobs:
         with:
           java-version: "21"
           distribution: "temurin"
-          cache: "gradle"
 
-      - name: Setup Android SDK Licenses
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Ensure Android SDK Licenses
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          if [ ! -d "$ANDROID_HOME/licenses" ] || [ ! -f "$ANDROID_HOME/licenses/android-sdk-license" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          fi
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -44,10 +52,12 @@ jobs:
       - name: Install Node Dependencies
         run: bun install --frozen-lockfile
 
-      - name: Cache Nx Task Cache
+      - name: Cache Nx Computation Cache
         uses: actions/cache@v6
         with:
-          path: .nx/cache
+          path: |
+            .nx/cache
+            .nx/workspace-data
           key: ${{ runner.os }}-nx-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-nx-${{ github.event.pull_request.base.sha || github.event.before || 'main' }}
