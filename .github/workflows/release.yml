@@ -74,6 +74,15 @@ jobs:
         run: |
           bun run scripts/release-check.ts --github-output
 
+          # If triggered automatically without explicit bump override and not releasable, exit early
+          if [ -z "${{ github.event.inputs.bump_type }}" ] || [ "${{ github.event.inputs.bump_type }}" = "auto" ]; then
+            if grep -q "releasable=false" "$GITHUB_OUTPUT"; then
+              echo "ℹ️  No releasable commits detected by release-check. Exiting cleanly."
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
           # Determine bump flag
           BUMP_FLAG=""
           case "${{ github.event.inputs.bump_type }}" in
@@ -161,8 +170,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .nx/cache
-          key: ${{ runner.os }}-nx-${{ github.sha }}
+          key: ${{ runner.os }}-nx-${{ needs.release.outputs.release_tag }}
           restore-keys: |
+            ${{ runner.os }}-nx-${{ github.sha }}
             ${{ runner.os }}-nx-
 
       - name: Build Release APK
@@ -176,10 +186,10 @@ jobs:
           tag_name: ${{ needs.release.outputs.release_tag }}
           name: DebugToggle ${{ needs.release.outputs.release_tag }}
           files: |
-            DebugToggle-v${{ needs.release.outputs.release_version }}.apk
-            DebugToggle-v${{ needs.release.outputs.release_version }}.apk.sha256
-            DebugToggle-release.apk
-            DebugToggle-release.apk.sha256
+            dist/DebugToggle-v${{ needs.release.outputs.release_version }}.apk
+            dist/DebugToggle-v${{ needs.release.outputs.release_version }}.apk.sha256
+            dist/DebugToggle-release.apk
+            dist/DebugToggle-release.apk.sha256
           draft: false
           prerelease: false
           generate_release_notes: true

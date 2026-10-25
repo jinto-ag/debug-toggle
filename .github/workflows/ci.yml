@@ -63,15 +63,17 @@ jobs:
         run: bun run test
 
       - name: Build Release APK
-        run: bun run build
+        run: |
+          chmod +x gradlew build.sh
+          bun run build
 
       - name: Upload Release Artifacts
         uses: actions/upload-artifact@v7
         with:
           name: DebugToggle-release-artifacts
           path: |
-            DebugToggle-release.apk
-            DebugToggle-release.apk.sha256
-            DebugToggle-v*.apk
-            DebugToggle-v*.apk.sha256
+            dist/DebugToggle-release.apk
+            dist/DebugToggle-release.apk.sha256
+            dist/DebugToggle-v*.apk
+            dist/DebugToggle-v*.apk.sha256
           retention-days: 7
