@@ -46,6 +46,12 @@
     <string name="perm_grant_failed">Failed to grant permission: %1$s</string>
     <string name="perm_grant_denied">Permission request was cancelled.</string>
     <string name="perm_granting_toast">Granting permission…</string>
+    <string name="perm_dialog_title">Grant System Permission</string>
+    <string name="perm_dialog_message">To enable debugging switches, system write permission is required.\n\n• One-time Setup: Connect to a computer and run the ADB command.\n• On-device: Start the automated permission service.</string>
+    <string name="perm_service_inactive_title">Permission Service Inactive</string>
+    <string name="perm_service_inactive_desc">The automated permission service is installed on this device but is currently stopped. Open the service to start it?</string>
+    <string name="btn_open_service">Open Service</string>
+    <string name="perm_already_granted">Permission is already granted.</string>
 
     <string name="section_about_share">ABOUT &amp; SHARE</string>
     <string name="btn_share_app">Share App (APK)</string>
