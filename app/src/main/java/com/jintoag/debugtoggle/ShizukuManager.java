@@ -1,8 +1,11 @@
 package com.jintoag.debugtoggle;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import java.io.File;
+import java.util.concurrent.Executor;
 import moe.shizuku.server.IRemoteProcess;
 import moe.shizuku.server.IShizukuService;
 import rikka.shizuku.Shizuku;
@@ -13,6 +16,32 @@ public class ShizukuManager {
 
     public interface GrantCallback {
         void onResult(boolean success, String message);
+    }
+
+    interface ProcessRunner {
+        int run(String[] cmd) throws Exception;
+    }
+
+    static ProcessRunner processRunner = cmd -> {
+        Process process = Runtime.getRuntime().exec(cmd);
+        return process.waitFor();
+    };
+
+    static void setProcessRunnerForTest(ProcessRunner runner) {
+        processRunner = runner;
+    }
+
+    static String[] rootPaths = {
+            "/system/bin/su",
+            "/system/xbin/su",
+            "/sbin/su",
+            "/vendor/bin/su"
+    };
+
+    static Executor backgroundExecutor = null;
+
+    static void setExecutorForTest(Executor executor) {
+        backgroundExecutor = executor;
     }
 
     public static boolean isShizukuInstalled(Context context) {
@@ -31,8 +60,30 @@ public class ShizukuManager {
         }
     }
 
+    public static Intent getServiceLaunchIntent(Context context) {
+        if (context == null) return null;
+        try {
+            return context.getPackageManager().getLaunchIntentForPackage("moe.shizuku.privileged.api");
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    public static boolean isRootAvailable() {
+        try {
+            for (String path : rootPaths) {
+                if (new File(path).exists()) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     public static boolean isServiceAvailable(Context context) {
-        return isShizukuInstalled(context) && isShizukuRunning();
+        return isShizukuRunning() || isRootAvailable();
     }
 
     public static boolean isShizukuAvailable() {
@@ -77,48 +128,76 @@ public class ShizukuManager {
         requestShizukuPermission();
     }
 
-    static java.util.concurrent.Executor backgroundExecutor = null;
-
-    static void setExecutorForTest(java.util.concurrent.Executor executor) {
-        backgroundExecutor = executor;
-    }
-
     public static void grantPermission(Context context, GrantCallback callback) {
-        grantSecureSettingsViaShizuku(context, callback);
+        if (isShizukuRunning()) {
+            grantSecureSettingsViaShizuku(context, callback);
+        } else if (isRootAvailable()) {
+            grantSecureSettingsViaRoot(context, callback);
+        } else {
+            if (callback != null) {
+                callback.onResult(false, "Automated service is not running");
+            }
+        }
     }
 
     public static void grantSecureSettingsViaShizuku(Context context, GrantCallback callback) {
         Runnable task = () -> {
             try {
                 if (!isShizukuAvailable()) {
-                    callback.onResult(false, "Automated service is not running");
+                    if (callback != null) callback.onResult(false, "Automated service is not running");
                     return;
                 }
                 if (!hasShizukuPermission()) {
-                    callback.onResult(false, "Permission not granted");
+                    if (callback != null) callback.onResult(false, "Permission not granted");
                     return;
                 }
 
                 String pkg = context != null ? context.getPackageName() : "com.jintoag.debugtoggle";
                 IShizukuService service = IShizukuService.Stub.asInterface(Shizuku.getBinder());
                 if (service == null) {
-                    callback.onResult(false, "System service is unavailable");
+                    if (callback != null) callback.onResult(false, "System service is unavailable");
                     return;
                 }
 
-                String[] cmd = new String[]{"pm", "grant", pkg, "android.permission.WRITE_SECURE_SETTINGS"};
+                String[] cmd = new String[]{"sh", "-c", "pm grant " + pkg + " android.permission.WRITE_SECURE_SETTINGS"};
                 IRemoteProcess remoteProcess = service.newProcess(cmd, null, null);
                 int exitCode = remoteProcess.waitFor();
                 if (exitCode == 0) {
-                    AppLogger.i("PermissionManager", "WRITE_SECURE_SETTINGS granted successfully");
-                    callback.onResult(true, "Permission granted successfully");
+                    AppLogger.i("PermissionManager", "WRITE_SECURE_SETTINGS granted successfully via automated service");
+                    if (callback != null) callback.onResult(true, "Permission granted successfully");
                 } else {
                     AppLogger.w("PermissionManager", "pm grant returned exit code: " + exitCode);
-                    callback.onResult(false, "Command failed with exit code: " + exitCode);
+                    if (callback != null) callback.onResult(false, "Command failed with exit code: " + exitCode);
                 }
             } catch (Throwable t) {
                 AppLogger.e("PermissionManager", "Error granting permission: " + t.getMessage());
-                callback.onResult(false, "Execution failed: " + t.getMessage());
+                if (callback != null) callback.onResult(false, "Execution failed: " + t.getMessage());
+            }
+        };
+
+        if (backgroundExecutor != null) {
+            backgroundExecutor.execute(task);
+        } else {
+            new Thread(task).start();
+        }
+    }
+
+    public static void grantSecureSettingsViaRoot(Context context, GrantCallback callback) {
+        Runnable task = () -> {
+            try {
+                String pkg = context != null ? context.getPackageName() : "com.jintoag.debugtoggle";
+                String[] cmd = new String[]{"su", "-c", "pm grant " + pkg + " android.permission.WRITE_SECURE_SETTINGS"};
+                int exitCode = processRunner.run(cmd);
+                if (exitCode == 0) {
+                    AppLogger.i("PermissionManager", "WRITE_SECURE_SETTINGS granted successfully via root");
+                    if (callback != null) callback.onResult(true, "Permission granted successfully");
+                } else {
+                    AppLogger.w("PermissionManager", "Root pm grant failed with exit code: " + exitCode);
+                    if (callback != null) callback.onResult(false, "Command failed with exit code: " + exitCode);
+                }
+            } catch (Throwable t) {
+                AppLogger.e("PermissionManager", "Error granting permission via root: " + t.getMessage());
+                if (callback != null) callback.onResult(false, "Execution failed: " + t.getMessage());
             }
         };
 

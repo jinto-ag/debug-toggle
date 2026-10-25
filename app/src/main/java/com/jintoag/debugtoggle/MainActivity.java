@@ -52,6 +52,20 @@ public class MainActivity extends Activity {
     private boolean isUpdatingFromObserver = false;
     private ContentObserver settingsObserver;
 
+    private final Shizuku.OnBinderReceivedListener binderReceivedListener = () -> {
+        runOnUiThread(() -> {
+            AppLogger.i("MainActivity", "Automated permission service binder received");
+            refreshUiState();
+        });
+    };
+
+    private final Shizuku.OnBinderDeadListener binderDeadListener = () -> {
+        runOnUiThread(() -> {
+            AppLogger.w("MainActivity", "Automated permission service binder dead");
+            refreshUiState();
+        });
+    };
+
     private final Shizuku.OnRequestPermissionResultListener shizukuPermissionListener = (requestCode, grantResult) -> {
         if (requestCode == ShizukuManager.REQUEST_CODE_SHIZUKU_PERMISSION) {
             runOnUiThread(() -> {
@@ -74,6 +88,45 @@ public class MainActivity extends Activity {
                 Toast.makeText(this, getString(R.string.perm_grant_failed, message), Toast.LENGTH_LONG).show();
             }
         }));
+    }
+
+    private void copySetupCommand() {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        ClipData clip = ClipData.newPlainText("Setup Command", "adb shell pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS");
+        if (clipboard != null) {
+            clipboard.setPrimaryClip(clip);
+            Toast.makeText(this, R.string.command_copied_toast, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void showStartServiceDialog() {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.perm_service_inactive_title)
+                .setMessage(R.string.perm_service_inactive_desc)
+                .setPositiveButton(R.string.btn_open_service, (dialog, which) -> {
+                    Intent intent = ShizukuManager.getServiceLaunchIntent(this);
+                    if (intent != null) {
+                        try {
+                            startActivity(intent);
+                        } catch (Exception e) {
+                            Toast.makeText(this, R.string.perm_service_unavailable, Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void showSetupOptionsDialog() {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.perm_dialog_title)
+                .setMessage(R.string.perm_dialog_message)
+                .setPositiveButton(R.string.btn_copy_command, (dialog, which) -> copySetupCommand())
+                .setNeutralButton(R.string.btn_open_dev, (dialog, which) -> {
+                    startActivity(manager.getDeveloperOptionsIntent());
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     private int colorSurface;
@@ -126,6 +179,8 @@ public class MainActivity extends Activity {
         initThemeColors();
         buildMaterialUi();
         registerSettingsObserver();
+        Shizuku.addBinderReceivedListenerSticky(binderReceivedListener);
+        Shizuku.addBinderDeadListener(binderDeadListener);
         Shizuku.addRequestPermissionResultListener(shizukuPermissionListener);
 
         AppLogger.i("MainActivity", "DebugToggle v" + getAppVersionName() + " (" + getAppVersionCode() + ") initialized");
@@ -275,12 +330,24 @@ public class MainActivity extends Activity {
         btnGrantPerm.setBackground(grantBtnBg);
         btnGrantPerm.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-            if (!ShizukuManager.isServiceAvailable(this)) {
-                Toast.makeText(this, R.string.perm_service_unavailable, Toast.LENGTH_LONG).show();
-            } else if (!ShizukuManager.hasPermission()) {
-                ShizukuManager.requestPermission();
-            } else {
+            if (manager != null && manager.hasSecureSettingsPermission()) {
+                Toast.makeText(this, R.string.perm_already_granted, Toast.LENGTH_SHORT).show();
+                refreshUiState();
+                return;
+            }
+
+            if (ShizukuManager.isShizukuRunning()) {
+                if (!ShizukuManager.hasShizukuPermission()) {
+                    ShizukuManager.requestPermission();
+                } else {
+                    performGrant();
+                }
+            } else if (ShizukuManager.isRootAvailable()) {
                 performGrant();
+            } else if (ShizukuManager.isShizukuInstalled(this)) {
+                showStartServiceDialog();
+            } else {
+                showSetupOptionsDialog();
             }
         });
         permissionCard.addView(btnGrantPerm);
@@ -290,12 +357,7 @@ public class MainActivity extends Activity {
                 0,
                 v -> {
                     v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-                    ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                    ClipData clip = ClipData.newPlainText("Setup Command", "adb shell pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS");
-                    if (clipboard != null) {
-                        clipboard.setPrimaryClip(clip);
-                        Toast.makeText(this, R.string.command_copied_toast, Toast.LENGTH_SHORT).show();
-                    }
+                    copySetupCommand();
                 }
         );
         LinearLayout.LayoutParams copyParams = new LinearLayout.LayoutParams(
@@ -829,8 +891,17 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        refreshUiState();
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
+        Shizuku.removeBinderReceivedListener(binderReceivedListener);
+        Shizuku.removeBinderDeadListener(binderDeadListener);
         Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener);
         if (settingsObserver != null) {
             getContentResolver().unregisterContentObserver(settingsObserver);

@@ -1,6 +1,7 @@
 package com.jintoag.debugtoggle;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.IBinder;
@@ -13,6 +14,7 @@ import org.junit.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import rikka.shizuku.Shizuku;
+import java.io.File;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,14 +22,23 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class ShizukuManagerTest {
 
+    private String[] originalRootPaths;
+
     @Before
     public void setUp() {
+        originalRootPaths = ShizukuManager.rootPaths.clone();
         ShizukuManager.setExecutorForTest(Runnable::run);
+        ShizukuManager.setProcessRunnerForTest(cmd -> 0);
     }
 
     @After
     public void tearDown() {
+        ShizukuManager.rootPaths = originalRootPaths;
         ShizukuManager.setExecutorForTest(null);
+        ShizukuManager.setProcessRunnerForTest(cmd -> {
+            Process process = Runtime.getRuntime().exec(cmd);
+            return process.waitFor();
+        });
     }
 
     @Test
@@ -58,6 +69,39 @@ public class ShizukuManagerTest {
         Mockito.when(pm.getPackageInfo(Mockito.eq("moe.shizuku.privileged.api"), Mockito.anyInt()))
                 .thenThrow(new RuntimeException("Crash"));
         Assert.assertFalse(ShizukuManager.isShizukuInstalled(context));
+    }
+
+    @Test
+    public void testGetServiceLaunchIntent() {
+        Assert.assertNull(ShizukuManager.getServiceLaunchIntent(null));
+
+        Context context = Mockito.mock(Context.class);
+        PackageManager pm = Mockito.mock(PackageManager.class);
+        Mockito.when(context.getPackageManager()).thenReturn(pm);
+
+        Intent mockIntent = new Intent();
+        Mockito.when(pm.getLaunchIntentForPackage("moe.shizuku.privileged.api")).thenReturn(mockIntent);
+        Assert.assertEquals(mockIntent, ShizukuManager.getServiceLaunchIntent(context));
+
+        Mockito.when(pm.getLaunchIntentForPackage("moe.shizuku.privileged.api")).thenThrow(new RuntimeException("PM error"));
+        Assert.assertNull(ShizukuManager.getServiceLaunchIntent(context));
+    }
+
+    @Test
+    public void testIsRootAvailable() throws Exception {
+        // When none of the paths exist
+        ShizukuManager.rootPaths = new String[]{"/nonexistent/su", "/fake/path/su"};
+        Assert.assertFalse(ShizukuManager.isRootAvailable());
+
+        // When a su file exists
+        File tempSu = File.createTempFile("su_test", ".tmp");
+        tempSu.deleteOnExit();
+        ShizukuManager.rootPaths = new String[]{"/nonexistent/su", tempSu.getAbsolutePath()};
+        Assert.assertTrue(ShizukuManager.isRootAvailable());
+
+        // When rootPaths is null (causes NullPointerException, caught by catch block)
+        ShizukuManager.rootPaths = null;
+        Assert.assertFalse(ShizukuManager.isRootAvailable());
     }
 
     @Test
@@ -101,18 +145,105 @@ public class ShizukuManagerTest {
     @Test
     public void testIsServiceAvailable() throws Exception {
         Context context = Mockito.mock(Context.class);
-        PackageManager pm = Mockito.mock(PackageManager.class);
-        Mockito.when(context.getPackageManager()).thenReturn(pm);
-        Mockito.when(pm.getPackageInfo(Mockito.eq("moe.shizuku.privileged.api"), Mockito.anyInt()))
-                .thenReturn(new PackageInfo());
+        ShizukuManager.rootPaths = new String[]{"/nonexistent/su"};
 
         try (MockedStatic<Shizuku> mockedShizuku = Mockito.mockStatic(Shizuku.class)) {
+            // Case 1: Shizuku is running
             mockedShizuku.when(Shizuku::pingBinder).thenReturn(true);
             Assert.assertTrue(ShizukuManager.isServiceAvailable(context));
 
+            // Case 2: Shizuku not running, but Root is available
             mockedShizuku.when(Shizuku::pingBinder).thenReturn(false);
+            File tempSu = File.createTempFile("su_test2", ".tmp");
+            tempSu.deleteOnExit();
+            ShizukuManager.rootPaths = new String[]{tempSu.getAbsolutePath()};
+            Assert.assertTrue(ShizukuManager.isServiceAvailable(context));
+
+            // Case 3: Neither Shizuku nor Root available
+            ShizukuManager.rootPaths = new String[]{"/nonexistent/su"};
             Assert.assertFalse(ShizukuManager.isServiceAvailable(context));
         }
+    }
+
+    @Test
+    public void testGrantPermissionRouting() {
+        Context context = Mockito.mock(Context.class);
+        ShizukuManager.rootPaths = new String[]{"/nonexistent/su"};
+
+        try (MockedStatic<Shizuku> mockedShizuku = Mockito.mockStatic(Shizuku.class)) {
+            // Neither Shizuku nor Root
+            mockedShizuku.when(Shizuku::pingBinder).thenReturn(false);
+            AtomicBoolean resSuccess = new AtomicBoolean(true);
+            AtomicReference<String> resMsg = new AtomicReference<>();
+
+            ShizukuManager.grantPermission(context, (success, message) -> {
+                resSuccess.set(success);
+                resMsg.set(message);
+            });
+
+            Assert.assertFalse(resSuccess.get());
+            Assert.assertEquals("Automated service is not running", resMsg.get());
+
+            // When Root is available
+            File tempSu = File.createTempFile("su_test3", ".tmp");
+            tempSu.deleteOnExit();
+            ShizukuManager.rootPaths = new String[]{tempSu.getAbsolutePath()};
+            ShizukuManager.setProcessRunnerForTest(cmd -> 0);
+
+            ShizukuManager.grantPermission(context, (success, message) -> {
+                resSuccess.set(success);
+                resMsg.set(message);
+            });
+            Assert.assertTrue(resSuccess.get());
+            Assert.assertEquals("Permission granted successfully", resMsg.get());
+        } catch (Exception e) {
+            Assert.fail("Exception should not be thrown: " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void testGrantSecureSettingsViaRoot() {
+        Context context = Mockito.mock(Context.class);
+        Mockito.when(context.getPackageName()).thenReturn("com.jintoag.debugtoggle");
+
+        // Success (exitCode 0)
+        ShizukuManager.setProcessRunnerForTest(cmd -> 0);
+        AtomicBoolean resSuccess = new AtomicBoolean(false);
+        AtomicReference<String> resMsg = new AtomicReference<>();
+
+        ShizukuManager.grantSecureSettingsViaRoot(context, (success, message) -> {
+            resSuccess.set(success);
+            resMsg.set(message);
+        });
+        Assert.assertTrue(resSuccess.get());
+        Assert.assertEquals("Permission granted successfully", resMsg.get());
+
+        // Failure (exitCode 1)
+        ShizukuManager.setProcessRunnerForTest(cmd -> 1);
+        ShizukuManager.grantSecureSettingsViaRoot(context, (success, message) -> {
+            resSuccess.set(success);
+            resMsg.set(message);
+        });
+        Assert.assertFalse(resSuccess.get());
+        Assert.assertEquals("Command failed with exit code: 1", resMsg.get());
+
+        // Exception
+        ShizukuManager.setProcessRunnerForTest(cmd -> {
+            throw new RuntimeException("Root execution crashed");
+        });
+        ShizukuManager.grantSecureSettingsViaRoot(context, (success, message) -> {
+            resSuccess.set(success);
+            resMsg.set(message);
+        });
+        Assert.assertFalse(resSuccess.get());
+        Assert.assertTrue(resMsg.get().contains("Execution failed"));
+
+        // Context null fallback package name
+        ShizukuManager.setProcessRunnerForTest(cmd -> 0);
+        ShizukuManager.grantSecureSettingsViaRoot(null, (success, message) -> {
+            resSuccess.set(success);
+        });
+        Assert.assertTrue(resSuccess.get());
     }
 
     @Test
@@ -126,7 +257,7 @@ public class ShizukuManagerTest {
             AtomicBoolean resSuccess = new AtomicBoolean(true);
             AtomicReference<String> resMsg = new AtomicReference<>();
 
-            ShizukuManager.grantPermission(context, (success, message) -> {
+            ShizukuManager.grantSecureSettingsViaShizuku(context, (success, message) -> {
                 resSuccess.set(success);
                 resMsg.set(message);
             });
@@ -143,7 +274,7 @@ public class ShizukuManagerTest {
             AtomicBoolean resSuccess = new AtomicBoolean(true);
             AtomicReference<String> resMsg = new AtomicReference<>();
 
-            ShizukuManager.grantPermission(context, (success, message) -> {
+            ShizukuManager.grantSecureSettingsViaShizuku(context, (success, message) -> {
                 resSuccess.set(success);
                 resMsg.set(message);
             });
@@ -163,7 +294,7 @@ public class ShizukuManagerTest {
             AtomicBoolean resSuccess = new AtomicBoolean(true);
             AtomicReference<String> resMsg = new AtomicReference<>();
 
-            ShizukuManager.grantPermission(context, (success, message) -> {
+            ShizukuManager.grantSecureSettingsViaShizuku(context, (success, message) -> {
                 resSuccess.set(success);
                 resMsg.set(message);
             });
@@ -191,7 +322,7 @@ public class ShizukuManagerTest {
             AtomicBoolean resSuccess = new AtomicBoolean(true);
             AtomicReference<String> resMsg = new AtomicReference<>();
 
-            ShizukuManager.grantPermission(context, (success, message) -> {
+            ShizukuManager.grantSecureSettingsViaShizuku(context, (success, message) -> {
                 resSuccess.set(success);
                 resMsg.set(message);
             });
@@ -217,7 +348,7 @@ public class ShizukuManagerTest {
             AtomicBoolean resSuccess = new AtomicBoolean(true);
             AtomicReference<String> resMsg = new AtomicReference<>();
 
-            ShizukuManager.grantPermission(context, (success, message) -> {
+            ShizukuManager.grantSecureSettingsViaShizuku(context, (success, message) -> {
                 resSuccess.set(success);
                 resMsg.set(message);
             });
@@ -250,7 +381,7 @@ public class ShizukuManagerTest {
             AtomicBoolean resSuccess = new AtomicBoolean(false);
             AtomicReference<String> resMsg = new AtomicReference<>();
 
-            ShizukuManager.grantPermission(context, (success, message) -> {
+            ShizukuManager.grantSecureSettingsViaShizuku(context, (success, message) -> {
                 resSuccess.set(success);
                 resMsg.set(message);
             });
@@ -269,9 +400,15 @@ public class ShizukuManagerTest {
             mockedShizuku.when(Shizuku::pingBinder).thenReturn(false);
 
             CountDownLatch latch = new CountDownLatch(1);
-            ShizukuManager.grantPermission(context, (success, message) -> latch.countDown());
+            ShizukuManager.grantSecureSettingsViaShizuku(context, (success, message) -> latch.countDown());
 
             Assert.assertTrue(latch.await(3, TimeUnit.SECONDS));
         }
+
+        // Test root async execution without executor
+        ShizukuManager.setExecutorForTest(null);
+        CountDownLatch rootLatch = new CountDownLatch(1);
+        ShizukuManager.grantSecureSettingsViaRoot(context, (success, message) -> rootLatch.countDown());
+        Assert.assertTrue(rootLatch.await(3, TimeUnit.SECONDS));
     }
 }
